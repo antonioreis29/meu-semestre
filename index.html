@@ -92,6 +92,12 @@
 
     <div id="toasts" role="status" aria-live="polite"></div>
 
-    <script type="module" src="./app.mjs"></script>
+    <!-- Classic scripts, not ES modules, so the page also works when opened
+         straight from disk (file://), where browsers block module loading.
+         They share one global scope; keep this order: each file uses the ones above it. -->
+    <script src="./modules/state.js" defer></script>
+    <script src="./modules/utils.js" defer></script>
+    <script src="./modules/render.js" defer></script>
+    <script src="./app.js" defer></script>
   </body>
 </html>

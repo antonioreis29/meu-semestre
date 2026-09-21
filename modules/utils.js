@@ -1,10 +1,8 @@
-import { appState } from './state.mjs';
+const $ = (selector, root = document) => root.querySelector(selector);
 
-export const $ = (selector, root = document) => root.querySelector(selector);
+const uid = () => Math.random().toString(36).slice(2, 9);
 
-export const uid = () => Math.random().toString(36).slice(2, 9);
-
-export const esc = (value) =>
+const esc = (value) =>
   String(value ?? '').replace(/[&<>"']/g, (char) => ({
     '&': '&amp;',
     '<': '&lt;',
@@ -14,12 +12,12 @@ export const esc = (value) =>
   }[char]));
 
 /** References a symbol from the inline sprite in index.html. */
-export const icon = (name, className = '') =>
+const icon = (name, className = '') =>
   `<svg class="ico ${className}" aria-hidden="true" focusable="false"><use href="#i-${name}"></use></svg>`;
 
-export const today = () => new Date().toISOString().slice(0, 10);
+const today = () => new Date().toISOString().slice(0, 10);
 
-export const fmt = (dateValue) => {
+const fmt = (dateValue) => {
   if (!dateValue) return '';
   return new Date(`${dateValue}T12:00`).toLocaleDateString('pt-BR', {
     day: '2-digit',
@@ -27,16 +25,16 @@ export const fmt = (dateValue) => {
   });
 };
 
-export const used = (subject) =>
+const used = (subject) =>
   appState.absences
     .filter((absence) => absence.sid === subject.id)
     .reduce((total, absence) => total + Number(absence.count || 0), 0);
 
-export const limit = (subject) => Math.max(1, Math.floor(subject.total * subject.max / 100));
+const limit = (subject) => Math.max(1, Math.floor(subject.total * subject.max / 100));
 
-export const pct = (subject) => Math.min(1, used(subject) / limit(subject));
+const pct = (subject) => Math.min(1, used(subject) / limit(subject));
 
-export const subjectState = (subject) => {
+const subjectState = (subject) => {
   const value = pct(subject);
 
   if (value >= 1) return ['bad', 'Limite atingido'];
@@ -44,14 +42,14 @@ export const subjectState = (subject) => {
   return ['ok', 'Tranquilo'];
 };
 
-export const ringColor = (subject) => {
+const ringColor = (subject) => {
   const value = pct(subject);
   if (value >= 1) return '#f2766c';
   if (value >= 0.75) return '#efb45c';
   return subject.color;
 };
 
-export function toast(message) {
+function toast(message) {
   const container = $('#toasts');
   if (!container) return;
 
@@ -62,7 +60,7 @@ export function toast(message) {
   setTimeout(() => element.remove(), 3100);
 }
 
-export function addRipple(event, button) {
+function addRipple(event, button) {
   const ripple = document.createElement('span');
   const rect = button.getBoundingClientRect();
   const size = Math.max(rect.width, rect.height) * 1.2;
@@ -73,13 +71,13 @@ export function addRipple(event, button) {
   setTimeout(() => ripple.remove(), 600);
 }
 
-export function removeItemWithAnimation(element, callback) {
+function removeItemWithAnimation(element, callback) {
   const item = element.closest('.item') || element;
   item.classList.add('removing');
   setTimeout(callback, 330);
 }
 
-export function createEmptyState(iconName, title, text = '') {
+function createEmptyState(iconName, title, text = '') {
   return `
     <div class="empty">
       <div class="empty-ico">${icon(iconName)}</div>
@@ -89,7 +87,7 @@ export function createEmptyState(iconName, title, text = '') {
   `;
 }
 
-export function numberAnimation() {
+function numberAnimation() {
   const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   document.querySelectorAll('[data-n]').forEach((element) => {
@@ -112,7 +110,7 @@ export function numberAnimation() {
   });
 }
 
-export function animateRings() {
+function animateRings() {
   const rings = document.querySelectorAll('.fg[data-off]');
   const fill = () => rings.forEach((element) => {
     element.style.strokeDashoffset = element.dataset.off;

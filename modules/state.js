@@ -1,5 +1,5 @@
-export const KEY = 'meu-semestre-v1';
-export const COLORS = [
+const KEY = 'meu-semestre-v1';
+const COLORS = [
   '#6c5ce7',
   '#00b894',
   '#e17055',
@@ -11,7 +11,7 @@ export const COLORS = [
   '#636e72',
 ];
 
-export const DEFAULT_STATE = {
+const DEFAULT_STATE = {
   subjects: [],
   absences: [],
   contents: [],
@@ -19,9 +19,9 @@ export const DEFAULT_STATE = {
   theme: 'dark',
 };
 
-export let appState = loadState();
+let appState = loadState();
 
-export function loadState() {
+function loadState() {
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return structuredClone(DEFAULT_STATE);
@@ -32,7 +32,7 @@ export function loadState() {
   }
 }
 
-export function saveState() {
+function saveState() {
   try {
     localStorage.setItem(KEY, JSON.stringify(appState));
   } catch {
@@ -40,29 +40,29 @@ export function saveState() {
   }
 }
 
-export function getSubject(subjectId) {
+function getSubject(subjectId) {
   return appState.subjects.find((subject) => subject.id === subjectId);
 }
 
-export function getContent(contentId) {
+function getContent(contentId) {
   return appState.contents.find((content) => content.id === contentId);
 }
 
-export function getTask(taskId) {
+function getTask(taskId) {
   return appState.tasks.find((task) => task.id === taskId);
 }
 
-export function setState(nextState) {
+function setState(nextState) {
   appState = nextState;
   saveState();
 }
 
-export function replaceState(nextState) {
+function replaceState(nextState) {
   appState = { ...DEFAULT_STATE, ...nextState };
   saveState();
 }
 
-export function updateState(mutator) {
+function updateState(mutator) {
   appState = mutator(appState);
   saveState();
 }

@@ -2,28 +2,26 @@
 
 Controle acadêmico de semestre: matérias, faltas, conteúdos estudados e tarefas/provas.
 
-Aplicação estática em JavaScript puro (ES modules), sem build e sem dependências.
+Aplicação estática em JavaScript puro, sem build e sem dependências.
 Os dados ficam no `localStorage` do navegador, com exportação e importação de backup em JSON.
 
 ## Como rodar
 
-Por usar ES modules, precisa ser servido por HTTP (abrir o arquivo direto via `file://` não funciona):
+Basta abrir o `index.html` no navegador (duplo-clique funciona).
 
-```bash
-python -m http.server 8000
-# abra http://localhost:8000
-```
+Os scripts são carregados como scripts clássicos, e não como ES modules, justamente
+para funcionar via `file://`: navegadores bloqueiam `type="module"` nessa origem.
 
 ## Estrutura
 
 | Arquivo | Responsabilidade |
 | --- | --- |
-| `index.html` | Shell da página e sprite SVG dos ícones |
+| `index.html` | Shell da página, sprite SVG dos ícones e ordem de carga dos scripts |
 | `styles.css` | Design system (tokens, componentes, responsividade) |
-| `app.mjs` | Ações, formulários e modais |
-| `modules/state.mjs` | Estado e persistência |
-| `modules/render.mjs` | Renderização das telas |
-| `modules/utils.mjs` | Helpers e cálculos de frequência |
+| `app.js` | Ações, formulários e modais |
+| `modules/state.js` | Estado e persistência |
+| `modules/render.js` | Renderização das telas |
+| `modules/utils.js` | Helpers e cálculos de frequência |
 
 ## Funcionalidades
 

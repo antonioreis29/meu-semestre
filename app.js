@@ -1,27 +1,3 @@
-import {
-  appState,
-  COLORS,
-  DEFAULT_STATE,
-  getContent,
-  getSubject,
-  getTask,
-  replaceState,
-  updateState,
-} from './modules/state.mjs';
-import {
-  $,
-  addRipple,
-  esc,
-  icon,
-  limit,
-  today,
-  toast,
-  uid,
-  used,
-  removeItemWithAnimation,
-} from './modules/utils.mjs';
-import { renderApp } from './modules/render.mjs';
-
 let view = 'home';
 let filter = 'all';
 

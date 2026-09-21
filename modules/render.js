@@ -1,19 +1,3 @@
-import { appState, getSubject } from './state.mjs';
-import {
-  animateRings,
-  createEmptyState,
-  esc,
-  fmt,
-  icon,
-  limit,
-  numberAnimation,
-  pct,
-  ringColor,
-  subjectState,
-  today,
-  used,
-} from './utils.mjs';
-
 const NAV_ITEMS = [
   ['home', 'home', 'Início'],
   ['subjects', 'book', 'Matérias'],
@@ -28,7 +12,7 @@ const STATUS_ICON = {
   bad: 'alert',
 };
 
-export function renderNav(currentView) {
+function renderNav(currentView) {
   const nav = document.getElementById('nav');
   if (!nav) return;
 
@@ -42,7 +26,7 @@ export function renderNav(currentView) {
   ).join('');
 }
 
-export function filtersMarkup(currentFilter) {
+function filtersMarkup(currentFilter) {
   return `
     <div class="filters" role="group" aria-label="Filtrar por matéria">
       <button class="chip ${currentFilter === 'all' ? 'on' : ''}" data-f="all">Todas</button>
@@ -78,7 +62,7 @@ function statCard(value, label, iconName, tone, index) {
   `;
 }
 
-export function subjectCard(subject, index) {
+function subjectCard(subject, index) {
   const [stateKey, text] = subjectState(subject);
 
   return `
@@ -100,7 +84,7 @@ export function subjectCard(subject, index) {
   `;
 }
 
-export function taskItem(task, index) {
+function taskItem(task, index) {
   const subject = getSubject(task.sid);
   const isLate = !task.done && task.due && task.due < today();
 
@@ -306,7 +290,7 @@ function renderTasks() {
   `;
 }
 
-export function renderApp({ view, filter }) {
+function renderApp({ view, filter }) {
   renderNav(view);
 
   const contentMap = {
