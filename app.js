@@ -1,8 +1,17 @@
 let view = 'home';
 let filter = 'all';
 
+// Close functions of the open dialogs, topmost last. Forms can open on top of the
+// subject panel, and Escape must dismiss only the one in front.
+const dialogStack = [];
+
+// The subject panel stays open while forms stack on top of it, so it is
+// re-rendered on every refresh, like the view behind it.
+let detail = null;
+
 function refreshView() {
   renderApp({ view, filter });
+  renderDetail();
 }
 
 function applyTheme() {
@@ -19,15 +28,45 @@ function subOptions(selected = '') {
 }
 
 /**
+ * Mounts an overlay with the dismiss behaviour every dialog shares: backdrop
+ * click, any `[data-c]` button and Escape (handled in `bindEvents`).
+ */
+function openOverlay(html, onClose = null) {
+  const overlay = document.createElement('div');
+  overlay.className = 'overlay';
+  overlay.innerHTML = html;
+
+  document.body.appendChild(overlay);
+  document.body.style.overflow = 'hidden';
+
+  const close = () => {
+    const position = dialogStack.indexOf(close);
+    if (position === -1) return;
+
+    dialogStack.splice(position, 1);
+    if (!dialogStack.length) document.body.style.overflow = '';
+    overlay.style.animation = 'fade .2s reverse forwards';
+    setTimeout(() => overlay.remove(), 200);
+    onClose?.();
+  };
+
+  dialogStack.push(close);
+
+  overlay.addEventListener('click', (event) => {
+    if (event.target === overlay || event.target.closest('[data-c]')) close();
+  });
+
+  return { close, overlay };
+}
+
+/**
  * Builds a modal dialog.
  * `options.onDelete`, when given, renders a destructive action in the footer.
  */
 function modal(title, body, onOk, options = {}) {
   const { okText = 'Salvar', onDelete = null } = options;
 
-  const overlay = document.createElement('div');
-  overlay.className = 'overlay';
-  overlay.innerHTML = `
+  const { close, overlay } = openOverlay(`
     <form class="modal" role="dialog" aria-modal="true" aria-label="${title}">
       <h3>${title}</h3>
       ${body}
@@ -37,27 +76,7 @@ function modal(title, body, onOk, options = {}) {
         <button class="btn">${okText}</button>
       </div>
     </form>
-  `;
-
-  document.body.appendChild(overlay);
-  document.body.style.overflow = 'hidden';
-
-  const close = () => {
-    document.body.style.overflow = '';
-    document.removeEventListener('keydown', onKeydown);
-    overlay.style.animation = 'fade .2s reverse forwards';
-    setTimeout(() => overlay.remove(), 200);
-  };
-
-  function onKeydown(event) {
-    if (event.key === 'Escape') close();
-  }
-
-  document.addEventListener('keydown', onKeydown);
-
-  overlay.addEventListener('click', (event) => {
-    if (event.target === overlay || event.target.closest('[data-c]')) close();
-  });
+  `);
 
   overlay.querySelectorAll('.colors i').forEach((colorItem) => {
     colorItem.addEventListener('click', () => {
@@ -85,6 +104,50 @@ function modal(title, body, onOk, options = {}) {
   if (firstInput) firstInput.focus();
 
   return { close, overlay };
+}
+
+/** Opens the panel listing a subject's tasks and contents. */
+function subjectDetail(subjectId) {
+  if (!getSubject(subjectId)) return;
+
+  const { close, overlay } = openOverlay(
+    '<div class="modal wide detail" role="dialog" aria-modal="true" tabindex="-1"></div>',
+    () => {
+      detail = null;
+    }
+  );
+
+  detail = { id: subjectId, close, overlay };
+  renderDetail();
+  overlay.querySelector('.detail').focus();
+}
+
+function renderDetail() {
+  if (!detail) return;
+
+  const subject = getSubject(detail.id);
+  if (!subject) {
+    // Deleted from the edit form stacked on top.
+    detail.close();
+    return;
+  }
+
+  const panel = detail.overlay.querySelector('.detail');
+  const scrollTop = panel.scrollTop;
+  // Re-rendering replaces the focused control; hand focus to its replacement.
+  const focused = panel.contains(document.activeElement) ? document.activeElement.closest('[data-a]') : null;
+
+  panel.setAttribute('aria-label', subject.name);
+  panel.style.setProperty('--c', subject.color);
+  panel.innerHTML = renderSubjectDetail(subject);
+  panel.scrollTop = scrollTop;
+
+  if (focused) {
+    const twin = panel.querySelector(`[data-a="${focused.dataset.a}"][data-id="${focused.dataset.id}"]`);
+    (twin || panel).focus();
+  }
+
+  animateRings();
 }
 
 function deleteSubject(subjectId) {
@@ -254,7 +317,7 @@ function contentForm(content = {}, subjectId = '') {
   );
 }
 
-function taskForm() {
+function taskForm(subjectId = '') {
   modal(
     'Nova tarefa',
     `
@@ -263,7 +326,7 @@ function taskForm() {
       <div class="two">
         <div>
           <label>Matéria</label>
-          <select name="sid"><option value="">—</option>${subOptions()}</select>
+          <select name="sid"><option value="">—</option>${subOptions(subjectId)}</select>
         </div>
         <div>
           <label>Data</label>
@@ -308,6 +371,7 @@ function handleActions(event) {
 
   const actions = {
     'new-subj': () => subjectForm(),
+    'open-subj': () => subjectDetail(id),
     'edit-subj': () => subjectForm(getSubject(id)),
     'del-subj': () => {
       const subject = getSubject(id);
@@ -345,7 +409,7 @@ function handleActions(event) {
         refreshView();
       });
     },
-    'new-task': () => taskForm(),
+    'new-task': () => taskForm(id),
     'tog-task': () => {
       updateState((current) => ({
         ...current,
@@ -426,6 +490,19 @@ function bindEvents() {
     if (button) addRipple(event, button);
 
     handleActions(event);
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && dialogStack.length) {
+      dialogStack[dialogStack.length - 1]();
+      return;
+    }
+
+    // Subject cards are clickable <article>s; let Enter and Space open them too.
+    if ((event.key === 'Enter' || event.key === ' ') && event.target.matches?.('.card[data-a]')) {
+      event.preventDefault();
+      event.target.click();
+    }
   });
 
   $('#export')?.addEventListener('click', exportBackup);

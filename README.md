@@ -26,6 +26,7 @@ para funcionar via `file://`: navegadores bloqueiam `type="module"` nessa origem
 ## Funcionalidades
 
 - Matérias com cor, total de aulas e limite de faltas (%)
+- Painel da matéria: clique no card para ver as tarefas e os conteúdos dela; o lápis abre a edição
 - Registro de faltas com aviso ao se aproximar do limite
 - Conteúdos com anotações e marcação de estudado
 - Tarefas e provas com prazo e destaque de atraso

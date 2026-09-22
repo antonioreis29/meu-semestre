@@ -66,7 +66,7 @@ function subjectCard(subject, index) {
   const [stateKey, text] = subjectState(subject);
 
   return `
-    <article class="card hov subj" style="--c:${subject.color};--i:${index}" data-a="edit-subj" data-id="${subject.id}">
+    <article class="card hov subj" style="--c:${subject.color};--i:${index}" data-a="open-subj" data-id="${subject.id}" tabindex="0" aria-label="Abrir ${esc(subject.name)}">
       <div class="row">
         ${ringHTML(subject)}
         <div>
@@ -78,13 +78,19 @@ function subjectCard(subject, index) {
       <div class="actions">
         <button class="chip" data-a="quick-abs" data-id="${subject.id}">${icon('plus')}Falta</button>
         <button class="chip" data-a="new-cont" data-id="${subject.id}">${icon('notes')}Conteúdo</button>
+        <button class="chip chip-edit" data-a="edit-subj" data-id="${subject.id}" aria-label="Editar ${esc(subject.name)}" title="Editar matéria">${icon('edit')}</button>
       </div>
       <button class="x" data-a="del-subj" data-id="${subject.id}" aria-label="Excluir ${esc(subject.name)}">${icon('trash')}</button>
     </article>
   `;
 }
 
-function taskItem(task, index) {
+/** Pending first, then by due date; undated tasks sink to the end of each group. */
+const sortTasks = (tasks) =>
+  [...tasks].sort((a, b) => Number(a.done) - Number(b.done) || (a.due || '9').localeCompare(b.due || '9'));
+
+// `showSubject` is off inside the subject panel, where the tag would only repeat its title.
+function taskItem(task, index, showSubject = true) {
   const subject = getSubject(task.sid);
   const isLate = !task.done && task.due && task.due < today();
 
@@ -94,11 +100,30 @@ function taskItem(task, index) {
       <div class="grow">
         <div class="t">
           <b>${esc(task.title)}</b>
-          ${subject ? `<span class="tag" style="--c:${subject.color}">${esc(subject.name)}</span>` : ''}
+          ${subject && showSubject ? `<span class="tag" style="--c:${subject.color}">${esc(subject.name)}</span>` : ''}
         </div>
         <p class="${isLate ? 'status-bad' : ''}"><span class="meta">${icon('clock')}${task.due ? `${isLate ? 'Atrasada · ' : ''}${fmt(task.due)}` : 'Sem data'}</span></p>
       </div>
       <button class="x" data-a="del-task" data-id="${task.id}" aria-label="Excluir tarefa">${icon('close')}</button>
+    </div>
+  `;
+}
+
+function contentItem(content, index, showSubject = true) {
+  const subject = getSubject(content.sid);
+  if (!subject) return '';
+
+  return `
+    <div class="item ${content.done ? 'done' : ''}" style="--c:${subject.color};--i:${index}">
+      <button class="check ${content.done ? 'on' : ''}" data-a="tog-cont" data-id="${content.id}" role="checkbox" aria-checked="${content.done ? 'true' : 'false'}" aria-label="Marcar como estudado">${icon('check')}</button>
+      <div class="grow" data-a="edit-cont" data-id="${content.id}" style="cursor:pointer">
+        <div class="t">
+          ${showSubject ? `<span class="tag" style="--c:${subject.color}">${esc(subject.name)}</span>` : ''}
+          <b>${esc(content.title)}</b>
+        </div>
+        ${content.notes ? `<p>${esc(content.notes)}</p>` : ''}
+      </div>
+      <button class="x" data-a="del-cont" data-id="${content.id}" aria-label="Excluir conteúdo">${icon('close')}</button>
     </div>
   `;
 }
@@ -176,7 +201,7 @@ function renderSubjects() {
     <header class="top">
       <div>
         <h1>Matérias</h1>
-        <p class="sub">Clique no card para editar ou use os atalhos.</p>
+        <p class="sub">Clique em uma matéria para ver tarefas e conteúdos, ou no lápis para editar.</p>
       </div>
       <button class="btn" data-a="new-subj">${icon('plus')}Nova matéria</button>
     </header>
@@ -248,33 +273,13 @@ function renderContents(currentFilter) {
     </header>
     ${filtersMarkup(currentFilter)}
     ${list.length
-      ? `<div class="list">${list
-          .map((content, index) => {
-            const subject = getSubject(content.sid);
-            if (!subject) return '';
-            return `
-              <div class="item ${content.done ? 'done' : ''}" style="--c:${subject.color};--i:${index}">
-                <button class="check ${content.done ? 'on' : ''}" data-a="tog-cont" data-id="${content.id}" role="checkbox" aria-checked="${content.done ? 'true' : 'false'}" aria-label="Marcar como estudado">${icon('check')}</button>
-                <div class="grow" data-a="edit-cont" data-id="${content.id}" style="cursor:pointer">
-                  <div class="t">
-                    <span class="tag" style="--c:${subject.color}">${esc(subject.name)}</span>
-                    <b>${esc(content.title)}</b>
-                  </div>
-                  ${content.notes ? `<p>${esc(content.notes)}</p>` : ''}
-                </div>
-                <button class="x" data-a="del-cont" data-id="${content.id}" aria-label="Excluir conteúdo">${icon('close')}</button>
-              </div>
-            `;
-          })
-          .join('')}</div>`
+      ? `<div class="list">${list.map((content, index) => contentItem(content, index)).join('')}</div>`
       : createEmptyState('notes', 'Nada por aqui ainda', 'Anote o que aprendeu para revisar antes das provas.')}
   `;
 }
 
 function renderTasks() {
-  const list = [...appState.tasks].sort(
-    (a, b) => Number(a.done) - Number(b.done) || (a.due || '9').localeCompare(b.due || '9')
-  );
+  const list = sortTasks(appState.tasks);
 
   return `
     <header class="top">
@@ -287,6 +292,48 @@ function renderTasks() {
     ${list.length
       ? `<div class="list">${list.map((task, index) => taskItem(task, index)).join('')}</div>`
       : createEmptyState('tasks', 'Sem tarefas', 'Aproveite a folga — ou adiante algo do próximo mês.')}
+  `;
+}
+
+/** Inner markup of the subject panel opened from a subject card. */
+function renderSubjectDetail(subject) {
+  const [stateKey, text] = subjectState(subject);
+  const tasks = sortTasks(appState.tasks.filter((task) => task.sid === subject.id));
+  const contents = appState.contents.filter((content) => content.sid === subject.id);
+
+  return `
+    <header class="detail-head">
+      ${ringHTML(subject)}
+      <div class="grow">
+        <h3>${esc(subject.name)}</h3>
+        <small>${esc(subject.prof || 'Sem professor')}</small>
+        <span class="pill status-${stateKey}">${icon(STATUS_ICON[stateKey])}${text}</span>
+      </div>
+      <div class="detail-tools">
+        <button class="icon-btn" data-a="edit-subj" data-id="${subject.id}" aria-label="Editar matéria" title="Editar matéria">${icon('edit')}</button>
+        <button class="icon-btn" data-c aria-label="Fechar" title="Fechar">${icon('close')}</button>
+      </div>
+    </header>
+
+    <section class="detail-sec">
+      <div class="detail-sec-head">
+        <h4>${icon('tasks')}Tarefas<span class="count">${tasks.length}</span></h4>
+        <button class="chip" data-a="new-task" data-id="${subject.id}">${icon('plus')}Nova tarefa</button>
+      </div>
+      ${tasks.length
+        ? `<div class="list">${tasks.map((task, index) => taskItem(task, index, false)).join('')}</div>`
+        : createEmptyState('tasks', 'Nenhuma tarefa', 'Provas e trabalhos desta matéria aparecem aqui.')}
+    </section>
+
+    <section class="detail-sec">
+      <div class="detail-sec-head">
+        <h4>${icon('notes')}Conteúdos<span class="count">${contents.length}</span></h4>
+        <button class="chip" data-a="new-cont" data-id="${subject.id}">${icon('plus')}Novo conteúdo</button>
+      </div>
+      ${contents.length
+        ? `<div class="list">${contents.map((content, index) => contentItem(content, index, false)).join('')}</div>`
+        : createEmptyState('notes', 'Nenhum conteúdo', 'Anote os tópicos desta matéria para revisar depois.')}
+    </section>
   `;
 }
 

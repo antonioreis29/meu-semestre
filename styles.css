@@ -938,6 +938,23 @@ header.top > div {
   border-color: rgba(242, 118, 108, 0.32);
 }
 
+/* Edit is set apart from the quick actions, at the far end of the row. */
+.chip.chip-edit {
+  margin-left: auto;
+  padding-inline: 9px;
+}
+
+.chip.chip-edit .ico {
+  width: 15px;
+  height: 15px;
+}
+
+.chip.chip-edit:hover {
+  background: var(--accent-soft);
+  color: var(--text);
+  border-color: var(--accent-line);
+}
+
 /* Filter bar — scrolls sideways instead of wrapping on narrow screens. */
 .filters {
   display: flex;
@@ -1315,6 +1332,133 @@ header.top > div {
 .colors i.on {
   transform: scale(1.06);
   box-shadow: 0 0 0 2px #0d1120, 0 0 0 4px var(--accent);
+}
+
+/* ---------- Subject panel ---------- */
+
+.modal.wide {
+  width: min(640px, 100%);
+}
+
+.detail {
+  position: relative;
+}
+
+.detail:focus {
+  outline: none;
+}
+
+/* Same light at the top edge as the subject card, so the panel reads as that card opened up. */
+.detail::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, var(--c), transparent);
+  opacity: 0.85;
+}
+
+.detail-head {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.detail-head .grow {
+  flex: 1;
+  min-width: 0;
+}
+
+.detail-head h3 {
+  overflow-wrap: anywhere;
+}
+
+.detail-head small {
+  display: block;
+  color: var(--text-3);
+  font-size: 0.85rem;
+}
+
+.detail-tools {
+  display: flex;
+  gap: 6px;
+  align-self: flex-start;
+}
+
+.detail-tools .icon-btn {
+  width: 36px;
+  height: 36px;
+}
+
+.detail-tools .ico {
+  width: 18px;
+  height: 18px;
+}
+
+.detail-sec {
+  margin-top: 26px;
+}
+
+.detail-sec-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.detail-sec-head h4 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-2);
+}
+
+.detail-sec-head h4 .ico {
+  width: 16px;
+  height: 16px;
+  color: var(--c);
+}
+
+.count {
+  min-width: 22px;
+  padding: 1px 7px;
+  border-radius: var(--r-pill);
+  background: var(--surface-3);
+  color: var(--text-2);
+  font-size: 0.7rem;
+  letter-spacing: 0;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Empty states sit inside a section here, not a whole page — scale them down. */
+.detail .empty {
+  padding: 22px 16px;
+}
+
+.detail .empty-ico {
+  width: 40px;
+  height: 40px;
+  margin-bottom: 10px;
+  border-radius: var(--r-sm);
+}
+
+.detail .empty-ico .ico {
+  width: 20px;
+  height: 20px;
+}
+
+.detail .empty b {
+  font-size: 0.92rem;
+}
+
+.detail .empty p {
+  font-size: 0.82rem;
 }
 
 /* ---------- Mobile action sheet ---------- */
