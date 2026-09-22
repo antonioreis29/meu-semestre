@@ -25,6 +25,12 @@ const fmt = (dateValue) => {
   });
 };
 
+const fmtSize = (bytes) => {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${Number((bytes / 1024 / 1024).toFixed(1)).toLocaleString('pt-BR')} MB`;
+};
+
 const used = (subject) =>
   appState.absences
     .filter((absence) => absence.sid === subject.id)

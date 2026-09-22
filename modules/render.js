@@ -109,6 +109,24 @@ function taskItem(task, index, showSubject = true) {
   `;
 }
 
+function attachmentsMarkup(files = []) {
+  if (!files.length) return '';
+
+  return `
+    <div class="files">
+      ${files
+        .map(
+          (file) => `
+            <button class="file" data-a="open-file" data-id="${file.id}" title="Abrir ${esc(file.name)}">
+              ${icon('clip')}<span>${esc(file.name)}</span><small>${fmtSize(file.size)}</small>
+            </button>
+          `
+        )
+        .join('')}
+    </div>
+  `;
+}
+
 function contentItem(content, index, showSubject = true) {
   const subject = getSubject(content.sid);
   if (!subject) return '';
@@ -122,6 +140,7 @@ function contentItem(content, index, showSubject = true) {
           <b>${esc(content.title)}</b>
         </div>
         ${content.notes ? `<p>${esc(content.notes)}</p>` : ''}
+        ${attachmentsMarkup(content.files)}
       </div>
       <button class="x" data-a="del-cont" data-id="${content.id}" aria-label="Excluir conteúdo">${icon('close')}</button>
     </div>

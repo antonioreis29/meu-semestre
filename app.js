@@ -160,6 +160,7 @@ function deleteSubject(subjectId) {
   }));
   refreshView();
   toast('Matéria excluída');
+  pruneFiles();
 }
 
 function subjectForm(subject = {}) {
@@ -288,7 +289,12 @@ function contentForm(content = {}, subjectId = '') {
   const isNew = !content.id;
   const selectedId = content.sid || subjectId || appState.subjects[0].id;
 
-  modal(
+  // Attachment edits stay local until Save, so Cancel leaves storage untouched.
+  const files = [...(content.files || [])];
+  const added = new Map();
+  let saving = false;
+
+  const { overlay } = modal(
     isNew ? 'Novo conteúdo' : 'Editar conteúdo',
     `
       <label>Matéria</label>
@@ -297,24 +303,91 @@ function contentForm(content = {}, subjectId = '') {
       <input name="title" required value="${esc(content.title)}" placeholder="Ex.: Integrais por partes">
       <label>Anotações</label>
       <textarea name="notes" placeholder="Resumo, links, fórmulas...">${esc(content.notes)}</textarea>
+      <label>Anexos</label>
+      <div class="attach">
+        <div class="attach-list"></div>
+        <button type="button" class="chip" data-add-file>${icon('clip')}Anexar arquivos</button>
+        <input type="file" multiple hidden data-file-input>
+      </div>
     `,
-    (data, closeDialog) => {
+    async (data, closeDialog) => {
+      if (saving) return;
+      saving = true;
+
+      // Bytes go in first, so the content never points at a file that is not stored.
+      if (added.size) {
+        try {
+          await putFiles([...added]);
+        } catch {
+          saving = false;
+          toast('Não foi possível salvar os anexos neste navegador');
+          return;
+        }
+      }
+
+      const payload = { ...data, files };
       if (isNew) {
         updateState((current) => ({
           ...current,
-          contents: [...current.contents, { id: uid(), done: false, ...data }],
+          contents: [...current.contents, { id: uid(), done: false, ...payload }],
         }));
       } else {
         updateState((current) => ({
           ...current,
-          contents: current.contents.map((item) => (item.id === content.id ? { ...item, ...data } : item)),
+          contents: current.contents.map((item) => (item.id === content.id ? { ...item, ...payload } : item)),
         }));
       }
       closeDialog();
       refreshView();
       toast('Conteúdo salvo');
+      pruneFiles();
     }
   );
+
+  const list = overlay.querySelector('.attach-list');
+  const input = overlay.querySelector('[data-file-input]');
+
+  const paintFiles = () => {
+    list.innerHTML = files
+      .map(
+        (file) => `
+          <div class="file-row">
+            ${icon('clip')}
+            <span title="${esc(file.name)}">${esc(file.name)}</span>
+            <small>${fmtSize(file.size)}</small>
+            <button type="button" class="x" data-rm-file="${file.id}" aria-label="Remover ${esc(file.name)}">${icon('close')}</button>
+          </div>
+        `
+      )
+      .join('');
+  };
+
+  overlay.querySelector('[data-add-file]').addEventListener('click', () => input.click());
+
+  input.addEventListener('change', () => {
+    for (const file of input.files) {
+      if (file.size > MAX_FILE_SIZE) {
+        toast(`"${file.name}" passa de ${fmtSize(MAX_FILE_SIZE)} e não foi anexado`);
+        continue;
+      }
+      const id = uid();
+      files.push({ id, name: file.name, type: file.type, size: file.size });
+      added.set(id, file);
+    }
+    input.value = '';
+    paintFiles();
+  });
+
+  list.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-rm-file]');
+    if (!button) return;
+    const fileId = button.dataset.rmFile;
+    files.splice(files.findIndex((file) => file.id === fileId), 1);
+    added.delete(fileId);
+    paintFiles();
+  });
+
+  paintFiles();
 }
 
 function taskForm(subjectId = '') {
@@ -407,8 +480,10 @@ function handleActions(event) {
           contents: current.contents.filter((item) => item.id !== id),
         }));
         refreshView();
+        pruneFiles();
       });
     },
+    'open-file': () => openFile(id),
     'new-task': () => taskForm(id),
     'tog-task': () => {
       updateState((current) => ({
@@ -436,8 +511,17 @@ function handleActions(event) {
   }
 }
 
-function exportBackup() {
-  const blob = new Blob([JSON.stringify(appState, null, 2)], { type: 'application/json' });
+async function exportBackup() {
+  // Attachments travel inside the backup as data URLs, so a restore is complete.
+  let files = {};
+  try {
+    files = await exportFiles();
+  } catch {
+    toast('Os anexos não puderam ser lidos e ficaram fora do backup');
+  }
+
+  const backup = Object.keys(files).length ? { ...appState, files } : appState;
+  const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;
@@ -513,16 +597,32 @@ function bindEvents() {
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = () => {
+    reader.onload = async () => {
+      let parsed;
       try {
-        const parsed = JSON.parse(String(reader.result));
-        replaceState({ ...DEFAULT_STATE, ...parsed });
-        applyTheme();
-        refreshView();
-        toast('Backup importado');
+        parsed = JSON.parse(String(reader.result));
       } catch {
-        toast('Arquivo inválido');
+        parsed = null;
       }
+      if (!parsed || typeof parsed !== 'object') {
+        toast('Arquivo inválido');
+        return;
+      }
+
+      const { files = {}, ...state } = parsed;
+      let filesSaved = true;
+      try {
+        // Stored before the state switches over, so no restored content points at a missing file.
+        if (Object.keys(files).length) await importFiles(files);
+      } catch {
+        filesSaved = false;
+      }
+
+      replaceState({ ...DEFAULT_STATE, ...state });
+      applyTheme();
+      refreshView();
+      toast(filesSaved ? 'Backup importado' : 'Backup importado, mas os anexos não puderam ser salvos');
+      pruneFiles();
     };
     reader.readAsText(file);
     event.target.value = '';
@@ -534,3 +634,4 @@ function bindEvents() {
 applyTheme();
 bindEvents();
 refreshView();
+pruneFiles();

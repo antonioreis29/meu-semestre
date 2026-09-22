@@ -1162,6 +1162,54 @@ header.top > div {
   color: var(--bad);
 }
 
+/* Attachment chips under a content's notes; each opens its file. */
+.files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.file {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 5px 10px 5px 8px;
+  border-radius: var(--r-xs);
+  background: var(--surface-sunken);
+  border: 1px solid var(--line);
+  color: var(--text-2);
+  font-size: 0.76rem;
+  font-weight: 600;
+  transition: background var(--fast) ease, color var(--fast) ease, border-color var(--fast) ease;
+}
+
+.file .ico {
+  width: 14px;
+  height: 14px;
+  color: var(--c, var(--accent));
+}
+
+.file span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file small {
+  flex: none;
+  color: var(--text-3);
+  font-weight: 500;
+}
+
+.file:hover {
+  background: var(--surface-3);
+  color: var(--text);
+  border-color: var(--line-strong);
+}
+
 .check {
   width: 26px;
   height: 26px;
@@ -1332,6 +1380,63 @@ header.top > div {
 .colors i.on {
   transform: scale(1.06);
   box-shadow: 0 0 0 2px #0d1120, 0 0 0 4px var(--accent);
+}
+
+/* Attachments in the content form: pending list above the add button. */
+.attach {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.attach-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.attach-list:empty {
+  display: none;
+}
+
+.file-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 6px 6px 12px;
+  border-radius: var(--r-sm);
+  background: var(--surface-sunken);
+  border: 1px solid var(--line);
+  font-size: 0.85rem;
+}
+
+.file-row .ico {
+  width: 15px;
+  height: 15px;
+  color: var(--text-3);
+}
+
+.file-row span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-row small {
+  flex: none;
+  color: var(--text-3);
+  font-size: 0.76rem;
+}
+
+/* No hover parent here to reveal it, so remove is always shown. */
+.file-row .x {
+  opacity: 1;
+  width: 28px;
+  height: 28px;
 }
 
 /* ---------- Subject panel ---------- */

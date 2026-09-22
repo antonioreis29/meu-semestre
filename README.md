@@ -4,6 +4,7 @@ Controle acadêmico de semestre: matérias, faltas, conteúdos estudados e taref
 
 Aplicação estática em JavaScript puro, sem build e sem dependências.
 Os dados ficam no `localStorage` do navegador, com exportação e importação de backup em JSON.
+Os anexos dos conteúdos ficam no IndexedDB do mesmo navegador e entram no backup.
 
 ## Como rodar
 
@@ -22,13 +23,14 @@ para funcionar via `file://`: navegadores bloqueiam `type="module"` nessa origem
 | `modules/state.js` | Estado e persistência |
 | `modules/render.js` | Renderização das telas |
 | `modules/utils.js` | Helpers e cálculos de frequência |
+| `modules/files.js` | Anexos no IndexedDB, abertura e inclusão no backup |
 
 ## Funcionalidades
 
 - Matérias com cor, total de aulas e limite de faltas (%)
 - Painel da matéria: clique no card para ver as tarefas e os conteúdos dela; o lápis abre a edição
 - Registro de faltas com aviso ao se aproximar do limite
-- Conteúdos com anotações e marcação de estudado
+- Conteúdos com anotações, marcação de estudado e anexos (até 10 MB por arquivo)
 - Tarefas e provas com prazo e destaque de atraso
 - Backup em JSON (exportar/importar)
 - Interface responsiva: sidebar completa, rail de ícones em tablet e barra inferior em celular
