@@ -60,6 +60,9 @@
       <symbol id="i-briefcase" viewBox="0 0 24 24"><rect x="3.4" y="7" width="17.2" height="12.8" rx="2.4"/><path d="M8.8 7V5.4a1.6 1.6 0 0 1 1.6-1.6h3.2a1.6 1.6 0 0 1 1.6 1.6V7M3.4 12.4h17.2"/></symbol>
       <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13.4 6.4 19 12l-5.6 5.6"/></symbol>
       <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m6.6 9.4 5.4 5.4 5.4-5.4"/></symbol>
+      <symbol id="i-grade" viewBox="0 0 24 24"><path d="M12 3.6l2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"/></symbol>
+      <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3.4" y="4.6" width="17.2" height="15.8" rx="2.8"/><path d="M3.4 9.6h17.2M8 2.8v3.6M16 2.8v3.6"/><path d="M7.8 13.4h.01M12 13.4h.01M16.2 13.4h.01M7.8 16.8h.01M12 16.8h.01"/></symbol>
+      <symbol id="i-archive" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="4.6" rx="1.4"/><path d="M4.8 8.6v9.8a1.8 1.8 0 0 0 1.8 1.8h10.8a1.8 1.8 0 0 0 1.8-1.8V8.6"/><path d="M10 12.6h4"/></symbol>
     </svg>
 
     <div class="shell">
@@ -98,6 +101,10 @@
         <div class="spacer"></div>
 
         <div class="side-foot">
+          <button class="ghost" data-a="semesters" title="Semestres">
+            <svg class="ico"><use href="#i-archive" /></svg>
+            <span>Semestres<small id="semester-name"></small></span>
+          </button>
           <button class="ghost" data-a="theme" title="Aparência">
             <svg class="ico"><use href="#i-theme" /></svg>
             <span>Aparência</span>
@@ -118,8 +125,12 @@
     </div>
 
     <div class="sheet-scrim" id="sheet" hidden>
-      <div class="sheet" role="dialog" aria-label="Opções">
+      <div class="sheet" role="dialog" aria-modal="true" aria-label="Opções">
         <span class="sheet-grip"></span>
+        <button class="sheet-item" data-sheet="semesters">
+          <svg class="ico"><use href="#i-archive" /></svg>
+          <span>Semestres</span>
+        </button>
         <button class="sheet-item" data-sheet="theme">
           <svg class="ico"><use href="#i-theme" /></svg>
           <span>Aparência</span>
@@ -139,13 +150,16 @@
 
     <!-- Classic scripts, not ES modules, so the page also works when opened
          straight from disk (file://), where browsers block module loading.
-         They share one global scope; keep this order: each file uses the ones above it. -->
+         They share one global scope; keep this order: each file uses the ones above
+         it while loading, and any of them (app.js included) once the page runs. -->
     <script src="./modules/state.js" defer></script>
     <script src="./modules/utils.js" defer></script>
     <script src="./modules/files.js" defer></script>
     <script src="./modules/theme.js" defer></script>
     <script src="./modules/render.js" defer></script>
     <script src="./modules/palette.js" defer></script>
+    <script src="./modules/calendar.js" defer></script>
+    <script src="./modules/semesters.js" defer></script>
     <script src="./app.js" defer></script>
   </body>
 </html>

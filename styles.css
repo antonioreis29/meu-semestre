@@ -1377,7 +1377,26 @@ header.top > div {
   margin-top: 6px;
 }
 
+/* Each swatch is a real radio, so arrows, Tab and screen readers work. */
+.colors label {
+  margin: 0;
+  display: block;
+  position: relative;
+}
+
+.colors input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
 .colors i {
+  display: block;
   width: 30px;
   height: 30px;
   border-radius: 50%;
@@ -1388,14 +1407,61 @@ header.top > div {
   box-shadow: var(--inner-top);
 }
 
-.colors i:hover {
+.colors label:hover i {
   transform: scale(1.12);
 }
 
 /* Selection ring sits outside the swatch so the colour stays unobstructed. */
-.colors i.on {
+.colors input:checked + i {
   transform: scale(1.06);
   box-shadow: 0 0 0 2px var(--modal-solid), 0 0 0 4px var(--accent);
+}
+
+.colors input:focus-visible + i {
+  outline: 2px solid var(--accent);
+  outline-offset: 5px;
+}
+
+/* Weekly schedule: one small field per weekday, Monday first. */
+.week {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.week-day {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.66rem;
+  letter-spacing: 0.04em;
+}
+
+.week-day input {
+  /* Inputs inherit the font; the day name above it is label-sized. */
+  font-size: 0.92rem;
+  padding: 9px 2px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.week-day input::-webkit-inner-spin-button,
+.week-day input::-webkit-outer-spin-button,
+.grade-field input::-webkit-inner-spin-button,
+.grade-field input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.field-hint {
+  margin-top: 7px;
+  font-size: 0.76rem;
+  line-height: 1.5;
+  color: var(--text-3);
 }
 
 /* Attachments in the content form: pending list above the add button. */
@@ -1498,6 +1564,71 @@ header.top > div {
   display: block;
   color: var(--text-3);
   font-size: 0.85rem;
+}
+
+.pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 6px;
+}
+
+/* Grades in the subject panel: P1, P2 and final, then the average they make. */
+.grades {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.grade-field {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.grade-field input {
+  font-size: 1.05rem;
+  font-weight: 700;
+  text-align: center;
+  padding: 10px 6px;
+  font-variant-numeric: tabular-nums;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.grade-avg {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Same caption as the fields beside it. */
+.grade-avg span {
+  font-size: 0.72rem;
+  color: var(--text-2);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* Read-only, so it is drawn as a dashed slot rather than a field. */
+.grade-avg b {
+  display: grid;
+  place-items: center;
+  flex: 1;
+  min-height: 46px;
+  border-radius: var(--r-sm);
+  border: 1px dashed var(--line-strong);
+  font-size: 1.05rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.grade-note {
+  margin-top: 10px;
+  font-size: 0.84rem;
+  line-height: 1.5;
+  color: var(--text-2);
 }
 
 .detail-tools {
@@ -2272,6 +2403,24 @@ kbd {
 
 .modal.confirm {
   width: min(420px, 100%);
+}
+
+/* A section title inside a dialog, like the ones in the subject panel. */
+.modal-sub {
+  margin: 28px 0 12px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-2);
+}
+
+.sem-current .btn {
+  margin-top: 14px;
+}
+
+.sem-item .chip {
+  flex: none;
 }
 
 .modal.confirm .sub {

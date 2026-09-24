@@ -50,16 +50,43 @@ function getFile(fileId) {
   return filesTx('readonly', (store) => store.get(fileId));
 }
 
+/** Metadata of every attachment, archived semesters included. */
 function allFileMetas() {
-  return appState.contents.flatMap((content) => content.files || []);
+  return [appState, ...appState.archive].flatMap((semester) => semester.contents.flatMap((content) => content.files));
+}
+
+/**
+ * Ids of the files a content, an archived semester or a whole state refers to.
+ * Defensive, since it also reads raw data straight from storage.
+ */
+function fileIdsIn(record) {
+  const ids = [];
+  const visit = (node) => {
+    if (!node || typeof node !== 'object') return;
+    if (Array.isArray(node.files)) node.files.forEach((file) => typeof file?.id === 'string' && ids.push(file.id));
+    if (Array.isArray(node.contents)) node.contents.forEach(visit);
+    if (Array.isArray(node.archive)) node.archive.forEach(visit);
+  };
+  visit(record);
+  return ids;
+}
+
+/** What is saved right now, which another tab may have changed ahead of this one. */
+function storedFileIds() {
+  try {
+    return fileIdsIn(JSON.parse(localStorage.getItem(KEY)));
+  } catch {
+    return [];
+  }
 }
 
 function getFileMeta(fileId) {
   return allFileMetas().find((file) => file.id === fileId);
 }
 
-// Files of deleted contents that an "Desfazer" toast can still bring back.
-// Pruning skips them until the toast is gone.
+// Files that no saved content points at yet but must not be pruned: those of
+// deleted contents an "Desfazer" toast can still bring back, and those of a
+// content being saved. Pruning skips them until they are released.
 const heldFiles = new Set();
 
 function holdFiles(fileIds) {
@@ -77,8 +104,9 @@ function releaseFiles(fileIds) {
 async function pruneFiles() {
   try {
     const keys = await filesTx('readonly', (store) => store.getAllKeys());
-    // Read after the await, so a save that finished meanwhile counts as referenced.
-    const referenced = new Set([...allFileMetas().map((file) => file.id), ...heldFiles]);
+    // Read after the await, so a save that finished meanwhile counts as
+    // referenced; storage too, for what another open tab just saved.
+    const referenced = new Set([...fileIdsIn(appState), ...storedFileIds(), ...heldFiles]);
     const orphans = keys.filter((key) => !referenced.has(key));
     if (orphans.length) {
       await filesTx('readwrite', (store) => {
@@ -132,16 +160,44 @@ function dataUrlToBlob(dataUrl) {
   return new Blob([bytes], { type });
 }
 
-/** Every referenced file as a data URL, keyed by id, for the JSON backup. */
+/**
+ * Every stored attachment as `[id, dataUrl]`, for the JSON backup. Read one
+ * by one, so a single unreadable file does not sink the rest; `missing`
+ * counts those left out.
+ */
 async function exportFiles() {
-  const files = {};
-  for (const meta of allFileMetas()) {
-    const blob = await getFile(meta.id);
-    if (blob) files[meta.id] = await blobToDataUrl(blob);
+  const entries = [];
+  let missing = 0;
+  const ids = new Set(allFileMetas().map((file) => file.id));
+  for (const id of ids) {
+    try {
+      const blob = await getFile(id);
+      if (blob) entries.push([id, await blobToDataUrl(blob)]);
+      else missing += 1;
+    } catch {
+      missing += 1;
+    }
   }
-  return files;
+  return { entries, missing };
 }
 
-function importFiles(files) {
-  return putFiles(Object.entries(files).map(([id, dataUrl]) => [id, dataUrlToBlob(dataUrl)]));
+/**
+ * Stores the attachments of a backup that the (already validated) state
+ * refers to. Returns how many could not be decoded.
+ */
+async function importFiles(files, state) {
+  const wanted = new Set(fileIdsIn(state));
+  const blobs = [];
+  let broken = 0;
+  for (const [id, dataUrl] of Object.entries(files)) {
+    if (!wanted.has(id)) continue;
+    try {
+      if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:')) throw new TypeError('not a data URL');
+      blobs.push([id, dataUrlToBlob(dataUrl)]);
+    } catch {
+      broken += 1;
+    }
+  }
+  if (blobs.length) await putFiles(blobs);
+  return broken;
 }

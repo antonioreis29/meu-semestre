@@ -320,7 +320,9 @@
 
 [data-theme^='argila'] label,
 [data-theme^='argila'] .stat-body span,
-[data-theme^='argila'] .detail-sec-head h4 {
+[data-theme^='argila'] .detail-sec-head h4,
+[data-theme^='argila'] .modal-sub,
+[data-theme^='argila'] .grade-avg span {
   text-transform: none;
   letter-spacing: 0;
   font-size: 0.82rem;
@@ -389,6 +391,6 @@
   -webkit-backdrop-filter: none;
 }
 
-[data-theme^='argila'] .colors i.on {
+[data-theme^='argila'] .colors input:checked + i {
   box-shadow: 0 0 0 2px var(--modal-solid), 0 0 0 4px var(--text);
 }

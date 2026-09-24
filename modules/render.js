@@ -15,6 +15,17 @@ const ROUTES = {
   tasks: 'tarefas',
 };
 
+/** The view a location hash points at; anything unknown or malformed (say "#%") opens Início. */
+function routeFromHash(hash) {
+  let slug = '';
+  try {
+    slug = decodeURIComponent(hash.slice(1));
+  } catch {
+    // not valid percent-encoding
+  }
+  return Object.keys(ROUTES).find((key) => ROUTES[key] === slug) || 'home';
+}
+
 const STATUS_ICON = {
   ok: 'check',
   warn: 'alert',
@@ -129,6 +140,18 @@ function ringHTML(subject) {
   `;
 }
 
+/** "Aprovado · 7,5", "Final: precisa de 4"…, toned by the outcome; empty until a grade is in. */
+function gradeMeta(subject) {
+  const { label, tone } = gradeStatus(subject);
+  if (!label) return '';
+  return `<span class="${tone ? `status-${tone}` : ''}">${icon('grade')}${label}</span>`;
+}
+
+/** Tooltip of the one-click absence button, which counts every class of the day. */
+function quickAbsenceTitle(subject) {
+  return `Registrar ${plural(classesOn(subject) || 1, 'falta', 'faltas')} hoje`;
+}
+
 function subjectCard(subject, index) {
   const [stateKey] = subjectState(subject);
   const { contents, studied, pending } = tally(subject.id);
@@ -146,9 +169,10 @@ function subjectCard(subject, index) {
       <div class="subj-meta">
         <span>${icon('notes')}${contents ? `${studied}/${contents} estudados` : 'Sem conteúdos'}</span>
         <span>${icon('tasks')}${pending ? plural(pending, 'pendente', 'pendentes') : 'Nada pendente'}</span>
+        ${gradeMeta(subject)}
       </div>
       <div class="actions">
-        <button class="chip" data-a="quick-abs" data-id="${subject.id}">${icon('plus')}Falta</button>
+        <button class="chip" data-a="quick-abs" data-id="${subject.id}" title="${quickAbsenceTitle(subject)}">${icon('plus')}Falta</button>
         <button class="chip" data-a="new-cont" data-id="${subject.id}">${icon('notes')}Conteúdo</button>
         <button class="chip chip-edit" data-a="edit-subj" data-id="${subject.id}" aria-label="Editar ${esc(subject.name)}" title="Editar matéria">${icon('edit')}</button>
       </div>
@@ -174,9 +198,9 @@ function taskItem(task, index, showSubject = true) {
   return `
     <div class="item ${task.done ? 'done' : ''}" style="--c:${subject ? subject.color : 'var(--accent)'};--i:${index}">
       <button class="check ${task.done ? 'on' : ''}" data-a="tog-task" data-id="${task.id}" role="checkbox" aria-checked="${task.done ? 'true' : 'false'}" aria-label="Concluir ${esc(task.title)}">${icon('check')}</button>
-      <div class="grow" data-a="edit-task" data-id="${task.id}" tabindex="0">
+      <div class="grow" data-a="edit-task" data-id="${task.id}" tabindex="0" role="button">
         <div class="t">
-          ${task.kind && task.kind !== 'tarefa' ? `<span class="kind kind-${task.kind}">${icon(kindIcon)}${kindLabel}</span>` : ''}
+          ${task.kind !== 'tarefa' ? `<span class="kind kind-${task.kind}">${icon(kindIcon)}${kindLabel}</span>` : ''}
           <b>${esc(task.title)}</b>
           ${subject && showSubject ? `<span class="tag" style="--c:${subject.color}">${esc(subject.name)}</span>` : ''}
         </div>
@@ -230,7 +254,7 @@ function absenceItem(absence, index, showSubject = true) {
   const subject = getSubject(absence.sid);
   if (!subject) return '';
   const count = Number(absence.count || 1);
-  const day = `${WEEKDAYS[new Date(`${absence.date}T12:00`).getDay()]}, ${fmt(absence.date)}`;
+  const day = `${WEEKDAYS[weekday(absence.date)]}, ${fmt(absence.date)}`;
 
   return `
     <div class="item" style="--c:${subject.color};--i:${index}">
@@ -257,7 +281,7 @@ function freqRow(subject, index) {
       <span class="freq-name">${esc(subject.name)}<small class="status-${stateKey}">${absenceNote(subject)}</small></span>
       <span class="bar" aria-hidden="true"><i style="width:${Math.round(pct(subject) * 100)}%"></i></span>
       <span class="freq-num" title="Faltas usadas / limite">${used(subject)}/${limit(subject)}</span>
-      <button class="mini-btn" data-a="quick-abs" data-id="${subject.id}" aria-label="Registrar falta em ${esc(subject.name)}" title="Registrar 1 falta">${icon('plus')}</button>
+      <button class="mini-btn" data-a="quick-abs" data-id="${subject.id}" aria-label="Registrar falta em ${esc(subject.name)}" title="${quickAbsenceTitle(subject)}">${icon('plus')}</button>
     </div>
   `;
 }
@@ -281,15 +305,18 @@ function todayLabel() {
 
 const joinList = (parts) => (parts.length > 1 ? `${parts.slice(0, -1).join(', ')} e ${parts.at(-1)}` : parts[0]);
 
-/** One sentence that says what needs attention, so the numbers need no decoding. */
+/** What needs attention, in a sentence or two, so the numbers need no decoding. */
 function homeSummary({ late, week, risky }) {
   if (!appState.subjects.length) return 'Faltas, conteúdos e prazos do semestre em um só lugar.';
+
+  const classes = todaysSubjects().map((subject) => esc(subject.name));
+  const lead = classes.length ? `Hoje tem aula de ${joinList(classes)}. ` : '';
 
   const parts = [];
   if (late) parts.push(plural(late, 'tarefa atrasada', 'tarefas atrasadas'));
   if (week) parts.push(`${plural(week, 'entrega', 'entregas')} nos próximos 7 dias`);
   if (risky) parts.push(`${plural(risky, 'matéria', 'matérias')} perto do limite de faltas`);
-  return parts.length ? `Você tem ${joinList(parts)}.` : 'Tudo em dia por aqui.';
+  return lead + (parts.length ? `Você tem ${joinList(parts)}.` : 'Tudo em dia por aqui.');
 }
 
 function welcomeCard() {
@@ -310,7 +337,7 @@ function renderHome() {
   const pendingTasks = appState.tasks.filter((task) => !task.done);
   const dated = sortTasks(pendingTasks.filter((task) => task.due && dayDiff(task.due) <= 7));
   const late = dated.filter((task) => dayDiff(task.due) < 0).length;
-  const risky = appState.subjects.filter((subject) => pct(subject) >= 0.75).length;
+  const risky = appState.subjects.filter((subject) => subjectState(subject)[0] !== 'ok').length;
   const studied = appState.contents.filter((content) => content.done).length;
   const totalAbsences = appState.absences.reduce((total, absence) => total + Number(absence.count || 0), 0);
   const bySeverity = [...appState.subjects].sort((a, b) => pct(b) - pct(a) || a.name.localeCompare(b.name));
@@ -407,10 +434,24 @@ function renderAbsences(currentFilter) {
   `;
 }
 
-function renderContents(currentFilter) {
+/** The "Mostrar concluídas" switch under a list, with the done items when open. */
+function doneToggle(items, showDone, noun, renderItem) {
+  if (!items.length) return '';
+  return `
+    <button class="more-toggle" data-a="toggle-done" aria-expanded="${showDone}">${icon('chevron')}${showDone ? 'Ocultar' : 'Mostrar'} ${noun} (${items.length})</button>
+    ${showDone ? `<div class="list">${items.map(renderItem).join('')}</div>` : ''}
+  `;
+}
+
+/** Contents still to study first; the order within each part is kept. */
+const sortContents = (contents) => [...contents].sort((a, b) => Number(a.done) - Number(b.done));
+
+function renderContents(currentFilter, showDone) {
   if (!appState.subjects.length) return needsSubjectState();
 
-  const list = appState.contents.filter((content) => currentFilter === 'all' || content.sid === currentFilter);
+  const inFilter = appState.contents.filter((content) => currentFilter === 'all' || content.sid === currentFilter);
+  const list = inFilter.filter((content) => !content.done);
+  const studied = inFilter.filter((content) => content.done);
 
   return `
     <header class="top">
@@ -423,7 +464,10 @@ function renderContents(currentFilter) {
     ${filtersMarkup(currentFilter)}
     ${list.length
       ? `<div class="list">${list.map((content, index) => contentItem(content, index)).join('')}</div>`
-      : createEmptyState('notes', 'Nada por aqui ainda', 'Anote o que aprendeu para revisar antes das provas.')}
+      : studied.length
+        ? createEmptyState('check', 'Tudo estudado', 'Nenhum conteúdo pendente por aqui.')
+        : createEmptyState('notes', 'Nada por aqui ainda', 'Anote o que aprendeu para revisar antes das provas.')}
+    ${doneToggle(studied, showDone, 'estudados', (content, index) => contentItem(content, index))}
   `;
 }
 
@@ -448,13 +492,18 @@ function renderTasks(currentFilter, showDone) {
     )
     .join('');
 
+  const canExport = appState.tasks.some((task) => task.due && !task.done);
+
   return `
     <header class="top">
       <div>
         <h1>Tarefas e provas</h1>
         <p class="sub">Agrupadas por prazo. Clique em uma para editar.</p>
       </div>
-      <button class="btn" data-a="new-task">${icon('plus')}Nova tarefa</button>
+      <div class="top-actions">
+        ${canExport ? `<button class="btn sec" data-a="export-ics" title="Baixar as tarefas com data para o Google Agenda, Outlook ou celular">${icon('calendar')}Exportar agenda</button>` : ''}
+        <button class="btn" data-a="new-task">${icon('plus')}Nova tarefa</button>
+      </div>
     </header>
     ${appState.subjects.length ? filtersMarkup(currentFilter) : ''}
     ${pending.length
@@ -462,10 +511,7 @@ function renderTasks(currentFilter, showDone) {
       : done.length
         ? createEmptyState('check', 'Tudo entregue', 'Nenhuma tarefa pendente por aqui.')
         : createEmptyState('tasks', 'Sem tarefas', 'Aproveite a folga — ou adiante algo do próximo mês.')}
-    ${done.length
-      ? `<button class="more-toggle" data-a="toggle-done" aria-expanded="${showDone}">${icon('chevron')}${showDone ? 'Ocultar' : 'Mostrar'} concluídas (${done.length})</button>
-         ${showDone ? `<div class="list">${done.map((task, doneIndex) => taskItem(task, doneIndex)).join('')}</div>` : ''}`
-      : ''}
+    ${doneToggle(done, showDone, 'concluídas', (task, doneIndex) => taskItem(task, doneIndex))}
   `;
 }
 
@@ -481,11 +527,47 @@ function detailSection(iconName, title, count, action, body) {
   `;
 }
 
+const GRADE_FIELDS = [
+  ['p1', 'P1', 'Nota da P1'],
+  ['p2', 'P2', 'Nota da P2'],
+  ['final', 'Final', 'Nota da prova final'],
+];
+
+/** P1, P2 and final typed right in the panel; each saves when the field is left. */
+function gradesSection(subject, status) {
+  const fields = GRADE_FIELDS.map(
+    ([key, label, name]) => `
+      <label class="grade-field">
+        <span>${label}</span>
+        <input type="number" min="0" max="10" step="0.01" inputmode="decimal" placeholder="—" autocomplete="off"
+          data-grade="${key}" data-id="${subject.id}" value="${subject.grades[key] ?? ''}" aria-label="${name}">
+      </label>
+    `
+  ).join('');
+
+  return `
+    <section class="detail-sec">
+      <div class="detail-sec-head">
+        <h4>${icon('grade')}Notas</h4>
+      </div>
+      <div class="grades">
+        ${fields}
+        <div class="grade-avg">
+          <span>Média</span>
+          <b>${status.average === null ? '—' : fmtScore(status.average)}</b>
+        </div>
+      </div>
+      <p class="grade-note" aria-live="polite"><span class="${status.tone ? `status-${status.tone}` : ''}">${status.detail}</span></p>
+    </section>
+  `;
+}
+
 /** Inner markup of the subject panel opened from a subject card. */
 function renderSubjectDetail(subject) {
   const [stateKey] = subjectState(subject);
+  const grade = gradeStatus(subject);
   const tasks = sortTasks(appState.tasks.filter((task) => task.sid === subject.id));
-  const contents = appState.contents.filter((content) => content.sid === subject.id);
+  const contents = sortContents(appState.contents.filter((content) => content.sid === subject.id));
   const absences = appState.absences
     .filter((absence) => absence.sid === subject.id)
     .sort((a, b) => b.date.localeCompare(a.date));
@@ -496,13 +578,18 @@ function renderSubjectDetail(subject) {
       <div class="grow">
         <h3>${esc(subject.name)}</h3>
         <small>${esc(subject.prof || 'Sem professor')}</small>
-        <span class="pill status-${stateKey}">${icon(STATUS_ICON[stateKey])}${absenceNote(subject)}</span>
+        <div class="pills">
+          <span class="pill status-${stateKey}">${icon(STATUS_ICON[stateKey])}${absenceNote(subject)}</span>
+          ${grade.tone ? `<span class="pill status-${grade.tone}">${icon('grade')}${grade.label}</span>` : ''}
+        </div>
       </div>
       <div class="detail-tools">
         <button class="icon-btn" data-a="edit-subj" data-id="${subject.id}" aria-label="Editar matéria" title="Editar matéria">${icon('edit')}</button>
         <button class="icon-btn" data-c aria-label="Fechar" title="Fechar">${icon('close')}</button>
       </div>
     </header>
+
+    ${gradesSection(subject, grade)}
 
     ${detailSection(
       'tasks',
@@ -528,7 +615,7 @@ function renderSubjectDetail(subject) {
       'absence',
       'Faltas',
       used(subject),
-      `<button class="chip" data-a="quick-abs" data-id="${subject.id}">${icon('plus')}Falta hoje</button>`,
+      `<button class="chip" data-a="quick-abs" data-id="${subject.id}" title="${quickAbsenceTitle(subject)}">${icon('plus')}Falta hoje</button>`,
       absences.length
         ? `<div class="list">${absences.map((absence, index) => absenceItem(absence, index, false)).join('')}</div>`
         : createEmptyState('check', 'Nenhuma falta', `Limite desta matéria: ${plural(limit(subject), 'falta', 'faltas')}.`)
@@ -543,12 +630,13 @@ function renderSubjectDetail(subject) {
 function renderApp({ view, filter, showDone, enter }) {
   renderNav(view);
   renderBackupAge();
+  renderSemesterLabel();
 
   const contentMap = {
     home: renderHome,
     subjects: renderSubjects,
     absences: () => renderAbsences(filter),
-    contents: () => renderContents(filter),
+    contents: () => renderContents(filter, showDone),
     tasks: () => renderTasks(filter, showDone),
   };
 

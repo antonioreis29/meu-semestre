@@ -30,6 +30,8 @@ function paletteActions() {
       searchOnly: true,
       run: () => setTheme(theme.id),
     })),
+    { icon: 'archive', label: 'Semestres', hint: 'Encerrar, reabrir ou renomear', run: semestersDialog },
+    { icon: 'calendar', label: 'Exportar agenda', hint: 'Tarefas com data, para Google Agenda ou Outlook', run: exportCalendar },
     { icon: 'download', label: 'Exportar backup', hint: 'Dados e anexos em um arquivo JSON', run: exportBackup },
     { icon: 'upload', label: 'Importar backup', run: importBackup },
     { icon: 'keyboard', label: 'Atalhos de teclado', key: '?', run: shortcutsHelp },
@@ -44,7 +46,7 @@ function paletteRecords() {
     icon: 'book',
     color: subject.color,
     label: subject.name,
-    hint: [subject.prof, absenceNote(subject)].filter(Boolean).join(' · '),
+    hint: [subject.prof, absenceNote(subject), gradeStatus(subject).label].filter(Boolean).join(' · '),
     run: () => subjectDetail(subject.id),
   }));
 

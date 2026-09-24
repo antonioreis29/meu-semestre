@@ -1,9 +1,9 @@
-let view = viewFromHash();
+let view = routeFromHash(location.hash);
 let filter = 'all';
 let showDone = false;
 
-// Close functions of the open dialogs, topmost last. Forms can open on top of the
-// subject panel, and Escape must dismiss only the one in front.
+// Open dialogs as { close, overlay }, topmost last. Forms can open on top of
+// the subject panel, and Escape must dismiss only the one in front.
 const dialogStack = [];
 
 // The subject panel stays open while forms stack on top of it, so it is
@@ -13,23 +13,40 @@ let detail = null;
 // The latest "Desfazer" still on screen, for Ctrl+Z.
 let pendingUndo = null;
 
-function viewFromHash() {
-  const slug = decodeURIComponent(location.hash.slice(1));
-  return Object.keys(ROUTES).find((key) => ROUTES[key] === slug) || 'home';
-}
+// Day and greeting the screen was last drawn for; see refreshIfStale.
+let drawnFor = '';
+
+const clockStamp = () => `${today()} ${greeting()}`;
 
 /** `enter` as in renderApp: true when a view opens, 'list' for a new filter. */
 function refreshView({ enter = false } = {}) {
   renderApp({ view, filter, showDone, enter });
   renderDetail();
+  paintSemesterDialog();
+  drawnFor = clockStamp();
+}
+
+/**
+ * "Hoje", "Atrasada" and the greeting are worked out when drawing, so a tab
+ * left open overnight (or past noon) redraws once they would read differently.
+ */
+function refreshIfStale() {
+  if (!document.hidden && clockStamp() !== drawnFor) refreshView();
 }
 
 function onRoute() {
-  view = viewFromHash();
+  view = routeFromHash(location.hash);
   filter = 'all';
   showDone = false;
   refreshView({ enter: true });
   window.scrollTo(0, 0);
+}
+
+/** After the whole state was swapped (import, semesters, their undo), the filter may name a subject that is gone. */
+function afterStateSwap() {
+  filter = 'all';
+  showDone = false;
+  refreshView({ enter: true });
 }
 
 function navigate(target) {
@@ -53,11 +70,26 @@ function subOptions(selected = '') {
 }
 
 /**
+ * Only the front layer takes focus and clicks: the page behind an open dialog
+ * or the mobile sheet, and every dialog under the top one, are inert. Toasts
+ * stay live, so "Desfazer" still works with a dialog open.
+ */
+function syncInert() {
+  const sheet = $('#sheet');
+  const shell = $('.shell');
+  if (shell) shell.inert = dialogStack.length > 0 || Boolean(sheet && !sheet.hidden);
+  dialogStack.forEach(({ overlay }, index) => {
+    overlay.inert = index < dialogStack.length - 1;
+  });
+}
+
+/**
  * Mounts an overlay with the dismiss behaviour every dialog shares: backdrop
- * click, any `[data-c]` button and Escape (handled in `bindEvents`). Focus
+ * click, any `[data-c]` button and Escape (handled in `handleKeys`). Focus
  * goes back to whatever opened it.
  */
 function openOverlay(html, onClose = null, className = '') {
+  closeSheet();
   const opener = document.activeElement;
   const overlay = document.createElement('div');
   overlay.className = `overlay ${className}`.trim();
@@ -67,18 +99,21 @@ function openOverlay(html, onClose = null, className = '') {
   document.body.style.overflow = 'hidden';
 
   const close = () => {
-    const position = dialogStack.indexOf(close);
+    const position = dialogStack.findIndex((dialog) => dialog.close === close);
     if (position === -1) return;
 
     dialogStack.splice(position, 1);
     if (!dialogStack.length) document.body.style.overflow = '';
+    overlay.inert = true;
     overlay.style.animation = 'fade .2s reverse forwards';
     setTimeout(() => overlay.remove(), 200);
+    syncInert();
     onClose?.();
     if (opener?.isConnected) opener.focus({ preventScroll: true });
   };
 
-  dialogStack.push(close);
+  dialogStack.push({ close, overlay });
+  syncInert();
 
   overlay.addEventListener('click', (event) => {
     if (event.target === overlay || event.target.closest('[data-c]')) close();
@@ -106,22 +141,10 @@ function modal(title, body, onOk, options = {}) {
     </form>
   `);
 
-  overlay.querySelectorAll('.colors i').forEach((colorItem) => {
-    colorItem.addEventListener('click', () => {
-      overlay.querySelectorAll('.colors i').forEach((item) => item.classList.remove('on'));
-      colorItem.classList.add('on');
-    });
-  });
-
   const form = overlay.querySelector('form');
   form.addEventListener('submit', (event) => {
     event.preventDefault();
-    const data = Object.fromEntries(new FormData(form));
-    const selectedColor = overlay.querySelector('.colors i.on');
-    if (selectedColor) {
-      data.color = selectedColor.style.getPropertyValue('--c');
-    }
-    onOk(data, close);
+    onOk(Object.fromEntries(new FormData(form)), close);
   });
 
   if (onDelete) {
@@ -134,8 +157,11 @@ function modal(title, body, onOk, options = {}) {
   return { close, overlay };
 }
 
-/** An in-app confirm(): themed, non-blocking, and resolves to true or false. */
-function confirmDialog({ title, text, okText = 'Excluir' }) {
+/**
+ * An in-app confirm(): themed, non-blocking, and resolves to true or false.
+ * `title` and `text` are markup: escape what comes from the user.
+ */
+function confirmDialog({ title, text, okText = 'Excluir', okIcon = 'trash', danger = true }) {
   return new Promise((resolve) => {
     let answered = false;
 
@@ -146,7 +172,7 @@ function confirmDialog({ title, text, okText = 'Excluir' }) {
           <p class="sub" id="confirm-text">${text}</p>
           <div class="foot">
             <button type="button" class="btn sec" data-c>Cancelar</button>
-            <button type="button" class="btn danger" data-ok>${icon('trash')}${okText}</button>
+            <button type="button" class="btn ${danger ? 'danger' : ''}" data-ok>${icon(okIcon)}${okText}</button>
           </div>
         </div>
       `,
@@ -191,8 +217,8 @@ function removeWithUndo(message, tests) {
   const taken = takeRecords(tests);
   if (!taken.length) return;
 
-  // Attachments of removed contents must survive pruning while undo is possible.
-  const fileIds = taken.flatMap(([, , record]) => (record.files || []).map((file) => file.id));
+  // Attachments of removed contents (or semesters) must survive pruning while undo is possible.
+  const fileIds = taken.flatMap(([, , record]) => fileIdsIn(record));
   holdFiles(fileIds);
   refreshView();
 
@@ -201,6 +227,26 @@ function removeWithUndo(message, tests) {
     () => {
       putBackRecords(taken);
       refreshView();
+    },
+    () => {
+      releaseFiles(fileIds);
+      pruneFiles();
+    }
+  );
+}
+
+/**
+ * Undo for changes that replace the whole state (an import, a semester
+ * switch): puts `previous` back. Its attachments are held until the chance is gone.
+ */
+function offerRestore(message, previous) {
+  const fileIds = fileIdsIn(previous);
+  holdFiles(fileIds);
+  offerUndo(
+    message,
+    () => {
+      replaceState(previous);
+      afterStateSwap();
     },
     () => {
       releaseFiles(fileIds);
@@ -238,7 +284,7 @@ function renderDetail(enter = false) {
   const panel = detail.overlay.querySelector('.detail');
   const scrollTop = panel.scrollTop;
   // Re-rendering replaces the focused control; hand focus to its replacement.
-  const focused = panel.contains(document.activeElement) ? document.activeElement.closest('[data-a]') : null;
+  const focused = panel.contains(document.activeElement) ? document.activeElement.closest('[data-a], [data-grade]') : null;
 
   panel.setAttribute('aria-label', subject.name);
   panel.style.setProperty('--c', subject.color);
@@ -248,9 +294,37 @@ function renderDetail(enter = false) {
   panel.scrollTop = scrollTop;
 
   if (focused) {
-    const twin = panel.querySelector(`[data-a="${focused.dataset.a}"][data-id="${focused.dataset.id}"]`);
+    const { a, id, grade } = focused.dataset;
+    const twin = panel.querySelector(grade ? `[data-grade="${grade}"]` : `[data-a="${a}"][data-id="${id}"]`);
+    // A grade being typed is not saved until the field is left; keep it.
+    if (grade && twin) twin.value = focused.value;
     (twin || panel).focus();
   }
+}
+
+/** Saves the grade typed in a panel field (P1, P2 or final); blank clears it. */
+function saveGrade(input) {
+  const { grade, id } = input.dataset;
+  const subject = getSubject(id);
+  if (!subject) return;
+
+  const value = input.value.trim() === '' ? null : Math.round(Number(input.value) * 100) / 100;
+  if (input.validity.badInput || (value !== null && !(value >= 0 && value <= 10))) {
+    toast(input.validity.badInput ? 'Digite a nota como número, de 0 a 10' : 'A nota vai de 0 a 10');
+    input.value = subject.grades[grade] ?? '';
+    return;
+  }
+  if (value === subject.grades[grade]) return;
+
+  updateState((current) => ({
+    ...current,
+    subjects: current.subjects.map((item) =>
+      item.id === id ? { ...item, grades: { ...item.grades, [grade]: value } } : item
+    ),
+  }));
+  // Drawn once focus has moved on (Tab to the next grade), so it lands on
+  // that field's replacement instead of being lost with the old markup.
+  requestAnimationFrame(() => refreshView());
 }
 
 async function deleteSubject(subjectId) {
@@ -280,9 +354,13 @@ async function deleteSubject(subjectId) {
   return true;
 }
 
+/** Monday first, as Brazilian calendars print the week. */
+const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0];
+
 function subjectForm(subject = {}) {
   const isNew = !subject.id;
   const currentColor = subject.color || COLORS[appState.subjects.length % COLORS.length];
+  const schedule = subject.schedule || [];
 
   modal(
     isNew ? 'Nova matéria' : 'Editar matéria',
@@ -301,20 +379,47 @@ function subjectForm(subject = {}) {
           <input name="max" type="number" min="1" max="100" required value="${subject.max || 25}">
         </div>
       </div>
+      <label>Aulas por dia da semana</label>
+      <div class="week">
+        ${WEEK_ORDER.map(
+          (day) => `
+            <label class="week-day">
+              <span aria-hidden="true">${WEEKDAYS[day].slice(0, 3)}</span>
+              <input name="day-${day}" type="number" min="0" max="24" inputmode="numeric" placeholder="0" value="${schedule[day] || ''}" aria-label="Aulas de ${WEEKDAYS[day].toLowerCase()}">
+            </label>
+          `
+        ).join('')}
+      </div>
+      <p class="field-hint">Opcional. Com a grade, “Falta hoje” conta todas as aulas do dia e o Início mostra as aulas de hoje.</p>
       <label>Cor</label>
-      <div class="colors">${COLORS.map((color) => `<i style="--c:${color}" class="${color === currentColor ? 'on' : ''}"></i>`).join('')}</div>
+      <div class="colors" role="radiogroup" aria-label="Cor">
+        ${COLORS.map(
+          (color, index) =>
+            `<label title="${COLOR_NAMES[index]}"><input type="radio" name="color" value="${color}" aria-label="${COLOR_NAMES[index]}" ${color === currentColor ? 'checked' : ''}><i style="--c:${color}"></i></label>`
+        ).join('')}
+      </div>
     `,
     (data, closeDialog) => {
+      const name = data.name.trim();
+      if (!name) {
+        toast('Dê um nome à matéria');
+        return;
+      }
+
       const payload = {
-        ...data,
+        name,
+        prof: data.prof.trim(),
         total: Number(data.total),
         max: Number(data.max),
+        schedule: Array.from({ length: 7 }, (_, day) => Math.round(Number(data[`day-${day}`]) || 0)),
+        // No swatch is checked when the subject kept a colour from outside the palette.
+        ...(data.color ? { color: data.color } : {}),
       };
 
       if (isNew) {
         updateState((current) => ({
           ...current,
-          subjects: [...current.subjects, { id: uid(), ...payload }],
+          subjects: [...current.subjects, { id: uid(), color: currentColor, grades: { p1: null, p2: null, final: null }, ...payload }],
         }));
         toast('Matéria criada');
       } else {
@@ -346,22 +451,22 @@ function addAbsence(payload, closeDialog) {
   }
 
   const id = uid();
+  const count = Number(payload.count || 1);
   updateState((current) => ({
     ...current,
-    absences: [...current.absences, { id, ...payload, count: Number(payload.count || 1) }],
+    absences: [...current.absences, { id, ...payload, count }],
   }));
 
   closeDialog();
   refreshView();
 
-  // Recomputed after the update so the warning reflects the new total.
-  const ratio = used(subject) / limit(subject);
+  // Worked out after the update, so the warning reflects the new total.
+  const [stateKey] = subjectState(subject);
   const message =
-    ratio >= 1
-      ? `${subject.name}: limite de faltas atingido`
-      : ratio >= 0.75
-        ? `Atenção: ${subject.name} está perto do limite`
-        : 'Falta registrada';
+    {
+      bad: `${subject.name}: limite de faltas atingido`,
+      warn: `Atenção: ${subject.name} está perto do limite`,
+    }[stateKey] || (count > 1 ? `${count} faltas registradas` : 'Falta registrada');
 
   // One click registers an absence, so one click takes it back.
   offerUndo(message, () => {
@@ -378,7 +483,7 @@ function absForm(subjectId = undefined) {
 
   const selectedId = subjectId || appState.subjects[0].id;
 
-  modal(
+  const { overlay } = modal(
     'Registrar falta',
     `
       <label>Matéria</label>
@@ -390,7 +495,7 @@ function absForm(subjectId = undefined) {
         </div>
         <div>
           <label>Quantidade</label>
-          <input name="count" type="number" min="1" value="1" required>
+          <input name="count" type="number" min="1" value="${classesOn(getSubject(selectedId)) || 1}" required>
         </div>
       </div>
       <label>Observação</label>
@@ -399,13 +504,28 @@ function absForm(subjectId = undefined) {
     (data, closeDialog) => addAbsence(data, closeDialog),
     { okText: 'Registrar' }
   );
+
+  // The quantity follows the schedule of the chosen subject and day, until typed over.
+  const form = overlay.querySelector('form');
+  const count = form.elements.namedItem('count');
+  let typed = false;
+  count.addEventListener('input', () => {
+    typed = true;
+  });
+  form.addEventListener('change', (event) => {
+    if (typed || event.target === count) return;
+    const subject = getSubject(form.elements.namedItem('sid').value);
+    const date = form.elements.namedItem('date').value;
+    if (subject && date) count.value = classesOn(subject, date) || 1;
+  });
 }
 
 /** Name for a pasted file: clipboard images all arrive as "image.png". */
 function pastedName(file) {
   if (file.name && file.name !== 'image.png') return file.name;
   const time = new Date().toTimeString().slice(0, 8).replace(/:/g, '');
-  return `captura-${today()}-${time}.${file.type.split('/')[1] || 'png'}`;
+  const extension = file.type.split('/')[1]?.split('+')[0] || 'png';
+  return `captura-${today()}-${time}.${extension}`;
 }
 
 function contentForm(content = {}, subjectId = '') {
@@ -445,11 +565,17 @@ function contentForm(content = {}, subjectId = '') {
       if (saving) return;
       saving = true;
 
+      // Held until the content that points at them is saved, so a prune
+      // running in between does not take the new files for orphans.
+      const addedIds = [...added.keys()];
+      holdFiles(addedIds);
+
       // Bytes go in first, so the content never points at a file that is not stored.
       if (added.size) {
         try {
           await putFiles([...added]);
         } catch {
+          releaseFiles(addedIds);
           saving = false;
           toast('Não foi possível salvar os anexos neste navegador');
           return;
@@ -468,6 +594,7 @@ function contentForm(content = {}, subjectId = '') {
           contents: current.contents.map((item) => (item.id === content.id ? { ...item, ...payload } : item)),
         }));
       }
+      releaseFiles(addedIds);
       closeDialog();
       refreshView();
       toast('Conteúdo salvo');
@@ -546,8 +673,12 @@ function contentForm(content = {}, subjectId = '') {
 
   // A pasted screenshot becomes an attachment; pasted text behaves as usual.
   overlay.addEventListener('paste', (event) => {
-    const pasted = [...(event.clipboardData?.files || [])];
+    const clipboard = event.clipboardData;
+    const pasted = [...(clipboard?.files || [])];
     if (!pasted.length) return;
+    // Word and Excel put a picture of the copied text next to the text itself;
+    // in a text field, the text is what was meant.
+    if (event.target.closest?.('input, textarea') && clipboard.types.includes('text/plain')) return;
     event.preventDefault();
     if (addFiles(pasted, pastedName)) toast('Imagem colada como anexo');
   });
@@ -594,15 +725,17 @@ function taskForm(task = {}, subjectId = '') {
       </div>
     `,
     (data, closeDialog) => {
+      const payload = { title: data.title, kind: data.kind, sid: data.sid, due: data.due };
+
       if (isNew) {
         updateState((current) => ({
           ...current,
-          tasks: [...current.tasks, { id: uid(), done: false, ...data }],
+          tasks: [...current.tasks, { id: uid(), done: false, ...payload }],
         }));
       } else {
         updateState((current) => ({
           ...current,
-          tasks: current.tasks.map((item) => (item.id === task.id ? { ...item, ...data } : item)),
+          tasks: current.tasks.map((item) => (item.id === task.id ? { ...item, ...payload } : item)),
         }));
       }
       closeDialog();
@@ -630,6 +763,13 @@ function toggleDone(key, itemId, doneMessage) {
   if (appState[key].find((item) => item.id === itemId)?.done) toast(doneMessage);
 }
 
+/** One click registers every class the subject has today, or one without a schedule. */
+function quickAbsence(subjectId) {
+  const subject = getSubject(subjectId);
+  if (!subject) return;
+  addAbsence({ sid: subjectId, date: today(), count: classesOn(subject) || 1, note: '' }, () => {});
+}
+
 /** What N creates on each view. */
 const NEW_IN_VIEW = {
   home: () => taskForm(),
@@ -655,6 +795,11 @@ function handleActions(event) {
   const actions = {
     palette: () => openPalette(),
     theme: () => themePicker(),
+    semesters: () => semestersDialog(),
+    'sem-close': () => closeSemester(),
+    'sem-open': () => reopenSemester(id),
+    'sem-del': () => deleteSemester(id),
+    'export-ics': () => exportCalendar(),
     'toggle-done': () => {
       showDone = !showDone;
       refreshView();
@@ -663,7 +808,7 @@ function handleActions(event) {
     'open-subj': () => subjectDetail(id),
     'edit-subj': () => subjectForm(getSubject(id)),
     'del-subj': () => deleteSubject(id),
-    'quick-abs': () => addAbsence({ sid: id, date: today(), count: 1, note: '' }, () => {}),
+    'quick-abs': () => quickAbsence(id),
     'new-abs': () => absForm(filterSubject() || undefined),
     'del-abs': () => {
       removeItemWithAnimation(actionButton, () => {
@@ -702,65 +847,157 @@ function handleActions(event) {
   }
 }
 
+// ---------- Backup ----------
+
+/** Past this much in attachments, exporting asks first: the file gets big and slow to build. */
+const BIG_BACKUP = 50 * 1024 * 1024;
+
 async function exportBackup() {
-  // Attachments travel inside the backup as data URLs, so a restore is complete.
-  let files = {};
-  try {
-    files = await exportFiles();
-  } catch {
-    toast('Os anexos não puderam ser lidos e ficaram fora do backup');
+  const attached = allFileMetas().reduce((total, file) => total + file.size, 0);
+  if (attached > BIG_BACKUP) {
+    const confirmed = await confirmDialog({
+      title: 'Backup grande',
+      text: `Os anexos somam ${fmtSize(attached)}, então o arquivo terá cerca de ${fmtSize(Math.round((attached * 4) / 3))} e pode demorar para ser gerado.`,
+      okText: 'Exportar',
+      okIcon: 'download',
+      danger: false,
+    });
+    if (!confirmed) return;
   }
 
-  const backup = Object.keys(files).length ? { ...appState, files } : appState;
-  const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = `meu-semestre-backup-${today()}.json`;
-  anchor.click();
-  URL.revokeObjectURL(url);
+  // Attachments travel inside the backup as data URLs, so a restore is complete.
+  const { entries, missing } = await exportFiles();
+
+  // Assembled from parts instead of one JSON.stringify of everything: with
+  // large attachments, that single string (indented, too) is what runs out of memory.
+  const parts = [JSON.stringify(appState).slice(0, -1)];
+  if (entries.length) {
+    parts.push(',"files":{');
+    entries.forEach(([id, dataUrl], index) => parts.push(`${index ? ',' : ''}${JSON.stringify(id)}:`, JSON.stringify(dataUrl)));
+    parts.push('}');
+  }
+  parts.push('}');
+  downloadBlob(new Blob(parts, { type: 'application/json' }), `meu-semestre-backup-${today()}.json`);
 
   setPref('backupAt', Date.now());
   renderBackupAge();
-  toast('Backup baixado');
+  toast(
+    missing
+      ? `Backup baixado, mas ${plural(missing, 'anexo não pôde ser lido', 'anexos não puderam ser lidos')}`
+      : 'Backup baixado'
+  );
 }
 
 function importBackup() {
   $('#file')?.click();
 }
 
-function bindSheet() {
+/** "O backup traz 3 matérias e 12 tarefas, mais 1 semestre arquivado." */
+function backupSummary(state) {
+  const parts = semesterParts(state);
+  if (state.archive.length) parts.push(plural(state.archive.length, 'semestre arquivado', 'semestres arquivados'));
+  return parts.length ? `O backup traz ${joinList(parts)}.` : 'O backup está vazio.';
+}
+
+/**
+ * Validates the file, asks before replacing data already here, stores its
+ * attachments and switches over, with a "Desfazer" back to what was here.
+ */
+async function importBackupFile(file) {
+  let parsed = null;
+  try {
+    parsed = JSON.parse(await file.text());
+  } catch {
+    // reported as not a backup
+  }
+
+  const backup = parseBackup(parsed);
+  if (backup.error) {
+    toast(backup.error);
+    return;
+  }
+  const { state, files, dropped } = backup;
+
+  if (hasData(appState)) {
+    const confirmed = await confirmDialog({
+      title: 'Substituir os dados atuais?',
+      text: `${backupSummary(state)} Tudo o que está neste navegador agora será trocado por ele; dá para desfazer logo em seguida.`,
+      okText: 'Substituir',
+      okIcon: 'upload',
+    });
+    if (!confirmed) return;
+  }
+
+  // Stored before the state switches over, so no restored content points at a missing file.
+  let broken = 0;
+  let filesSaved = true;
+  try {
+    broken = await importFiles(files, state);
+  } catch {
+    filesSaved = false;
+  }
+
+  const previous = appState;
+  replaceState(state);
+  afterStateSwap();
+
+  const notes = [
+    dropped && plural(dropped, 'registro inválido ignorado', 'registros inválidos ignorados'),
+    broken && plural(broken, 'anexo corrompido ignorado', 'anexos corrompidos ignorados'),
+    !filesSaved && 'os anexos não puderam ser salvos',
+  ].filter(Boolean);
+  const message = `Backup importado${notes.length ? `: ${joinList(notes)}` : ''}`;
+
+  if (hasData(previous)) {
+    offerRestore(message, previous);
+  } else {
+    toast(message);
+    pruneFiles();
+  }
+}
+
+// ---------- Mobile sheet ----------
+
+function openSheet() {
   const sheet = $('#sheet');
-  const moreButton = $('#more');
-  if (!sheet || !moreButton) return;
+  if (!sheet) return;
+  sheet.hidden = false;
+  $('#more')?.setAttribute('aria-expanded', 'true');
+  syncInert();
+  sheet.querySelector('.sheet-item')?.focus();
+}
 
-  const openSheet = () => {
-    sheet.hidden = false;
-    moreButton.setAttribute('aria-expanded', 'true');
-  };
+function closeSheet() {
+  const sheet = $('#sheet');
+  if (!sheet || sheet.hidden) return;
+  const hadFocus = sheet.contains(document.activeElement);
+  sheet.hidden = true;
+  $('#more')?.setAttribute('aria-expanded', 'false');
+  syncInert();
+  if (hadFocus) $('#more')?.focus({ preventScroll: true });
+}
 
-  const closeSheet = () => {
-    sheet.hidden = true;
-    moreButton.setAttribute('aria-expanded', 'false');
-  };
+function bindSheet() {
+  $('#more')?.addEventListener('click', openSheet);
 
-  moreButton.addEventListener('click', openSheet);
-
-  sheet.addEventListener('click', (event) => {
+  $('#sheet')?.addEventListener('click', (event) => {
     const item = event.target.closest('[data-sheet]');
     if (item) {
       closeSheet();
-      const run = { theme: themePicker, export: exportBackup, import: importBackup }[item.dataset.sheet];
+      const run = {
+        theme: themePicker,
+        semesters: semestersDialog,
+        export: exportBackup,
+        import: importBackup,
+      }[item.dataset.sheet];
       run?.();
       return;
     }
-    if (event.target === sheet) closeSheet();
-  });
-
-  document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape' && !sheet.hidden) closeSheet();
+    if (event.target === event.currentTarget) closeSheet();
   });
 }
+
+// ---------- Keyboard ----------
 
 const isTyping = (target) => target.closest?.('input, textarea, select, [contenteditable="true"]');
 
@@ -774,8 +1011,20 @@ function handleKeys(event) {
     return;
   }
 
-  if (key === 'Escape' && dialogStack.length) {
-    dialogStack[dialogStack.length - 1]();
+  if (key === 'Escape') {
+    const sheet = $('#sheet');
+    if (sheet && !sheet.hidden) {
+      closeSheet();
+      return;
+    }
+    if (dialogStack.length) {
+      dialogStack[dialogStack.length - 1].close();
+      return;
+    }
+  }
+
+  if (key === 'Enter' && event.target.matches?.('[data-grade]')) {
+    saveGrade(event.target);
     return;
   }
 
@@ -828,6 +1077,30 @@ function bindEvents() {
   document.addEventListener('keydown', handleKeys);
   window.addEventListener('hashchange', onRoute);
 
+  // Grades in the subject panel save when the field is left (or on Enter).
+  document.addEventListener('change', (event) => {
+    if (event.target.matches?.('[data-grade]')) saveGrade(event.target);
+  });
+
+  // Another tab saved: take its data (or theme) here too, instead of
+  // overwriting it with this tab's copy on the next save.
+  window.addEventListener('storage', (event) => {
+    if (event.storageArea !== localStorage) return;
+    if (event.key === KEY || event.key === null) {
+      reloadState();
+      refreshView();
+    }
+    if (event.key === PREFS_KEY || event.key === null) {
+      reloadPrefs();
+      applyTheme();
+      paintThemePicker();
+      renderBackupAge();
+    }
+  });
+
+  document.addEventListener('visibilitychange', refreshIfStale);
+  setInterval(refreshIfStale, 60 * 1000);
+
   // A file dropped outside the attachment area would make the browser leave
   // the app to show it.
   const holdFileDrop = (event) => {
@@ -841,37 +1114,8 @@ function bindEvents() {
 
   $('#file')?.addEventListener('change', (event) => {
     const [file] = event.target.files || [];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = async () => {
-      let parsed;
-      try {
-        parsed = JSON.parse(String(reader.result));
-      } catch {
-        parsed = null;
-      }
-      if (!parsed || typeof parsed !== 'object') {
-        toast('Arquivo inválido');
-        return;
-      }
-
-      const { files = {}, ...state } = parsed;
-      let filesSaved = true;
-      try {
-        // Stored before the state switches over, so no restored content points at a missing file.
-        if (Object.keys(files).length) await importFiles(files);
-      } catch {
-        filesSaved = false;
-      }
-
-      replaceState(state);
-      refreshView({ enter: true });
-      toast(filesSaved ? 'Backup importado' : 'Backup importado, mas os anexos não puderam ser salvos');
-      pruneFiles();
-    };
-    reader.readAsText(file);
     event.target.value = '';
+    if (file) importBackupFile(file);
   });
 
   bindSheet();
