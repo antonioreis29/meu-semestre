@@ -1,0 +1,394 @@
+/* ==========================================================================
+   Meu Semestre — themes
+   Every colour the components use is a token set here. styles.css draws the
+   Aurora look by default; the Argila blocks below re-point the tokens and
+   restyle the few things tokens cannot express (type, flat surfaces).
+
+   Blocks match any element with the attribute, not just the root, so the
+   previews in the theme picker render with their own theme's real tokens.
+   ========================================================================== */
+
+/* ---------- Aurora: dark, glass and glow. Also the fallback for unknown values. ---------- */
+
+:root,
+[data-theme='aurora'] {
+  color-scheme: dark;
+
+  --bg: #070a12;
+  --canvas:
+    radial-gradient(90ch 60ch at 8% -8%, rgba(124, 140, 255, 0.2), transparent 62%),
+    radial-gradient(70ch 55ch at 98% 8%, rgba(196, 124, 255, 0.14), transparent 58%),
+    radial-gradient(80ch 60ch at 52% 108%, rgba(70, 211, 165, 0.08), transparent 60%),
+    linear-gradient(170deg, #04060c 0%, #070a12 42%, #0b1020 100%);
+
+  --surface-1: rgba(255, 255, 255, 0.032);
+  --surface-2: rgba(255, 255, 255, 0.055);
+  --surface-3: rgba(255, 255, 255, 0.085);
+  --surface-sunken: rgba(4, 7, 14, 0.42);
+  --card-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.058), rgba(255, 255, 255, 0.034));
+  --card-hover-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.085), rgba(255, 255, 255, 0.034));
+  --side-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.012));
+  --bar-bg: rgba(7, 10, 18, 0.8);
+  --field: rgba(4, 7, 14, 0.42);
+  --field-focus: rgba(4, 7, 14, 0.62);
+
+  --line: rgba(255, 255, 255, 0.075);
+  --line-strong: rgba(255, 255, 255, 0.14);
+  --line-hover: rgba(255, 255, 255, 0.2);
+
+  --text: #e9edfa;
+  --text-2: #a4aec6;
+  --text-3: #6d7894;
+
+  --accent: #7c8cff;
+  --accent-text: #9ba7ff;
+  --brand: linear-gradient(135deg, #7c8cff 0%, #9a7cff 52%, #c47cff 100%);
+  --brand-glow: 0 10px 30px rgba(96, 110, 235, 0.32);
+  --marker-glow: 0 0 12px rgba(124, 140, 255, 0.7);
+  --logo-inner: rgba(255, 255, 255, 0.92);
+
+  --btn-bg: var(--brand);
+  --btn-bg-hover: var(--brand);
+  --btn-fg: #f2f4ff;
+  --btn-shadow: 0 10px 30px rgba(96, 110, 235, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  --btn-shadow-hover: 0 14px 34px rgba(96, 110, 235, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  --btn-hover-filter: brightness(1.07);
+  --danger-bg: linear-gradient(135deg, #f2766c, #d1544a);
+  --danger-shadow: 0 10px 26px rgba(209, 84, 74, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+
+  --ok: #46d3a5;
+  --warn: #efb45c;
+  --bad: #f2766c;
+
+  --check-bg: linear-gradient(135deg, #46d3a5, #23a67e);
+  --check-fg: #04120d;
+  --check-shadow: 0 6px 16px rgba(35, 166, 126, 0.32);
+  --tone-glyph: #0a0f1e;
+  --ring-track: rgba(255, 255, 255, 0.09);
+
+  --modal-bg: linear-gradient(180deg, #151a2e, #0d1120);
+  --modal-solid: #0d1120;
+  --scrim: rgba(3, 6, 13, 0.62);
+  --toast-bg: linear-gradient(180deg, #1a2036, #12172a);
+  --toast-fg: #e9edfa;
+  --option-bg: #10152a;
+  --picker-filter: invert(0.74);
+  --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%23a4aec6' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M4 6.5 8 10.5l4-4'/%3E%3C/svg%3E");
+  --scroll-thumb: rgba(255, 255, 255, 0.13);
+  --scroll-thumb-hover: rgba(255, 255, 255, 0.22);
+
+  --shadow-sm: 0 1px 2px rgba(2, 5, 12, 0.5), 0 4px 12px rgba(2, 5, 12, 0.28);
+  --shadow-md: 0 2px 4px rgba(2, 5, 12, 0.4), 0 12px 28px rgba(2, 5, 12, 0.38);
+  --shadow-lg: 0 4px 8px rgba(2, 5, 12, 0.35), 0 28px 64px rgba(2, 5, 12, 0.55);
+  --inner-top: inset 0 1px 0 rgba(255, 255, 255, 0.07);
+}
+
+/* ---------- Argila: warm paper and terracotta, after Anthropic's visual language ---------- */
+
+[data-theme='argila'] {
+  color-scheme: light;
+
+  --bg: #faf9f5;
+  --canvas: #faf9f5;
+
+  --surface-1: #f5f4ee;
+  --surface-2: #f0eee6;
+  --surface-3: #e8e6dc;
+  --surface-sunken: #f5f4ee;
+  --card-bg: #ffffff;
+  --card-hover-bg: #ffffff;
+  --side-bg: #f3f1ea;
+  --bar-bg: rgba(250, 249, 245, 0.92);
+  --field: #ffffff;
+  --field-focus: #ffffff;
+
+  --line: rgba(31, 30, 29, 0.1);
+  --line-strong: rgba(31, 30, 29, 0.16);
+  --line-hover: rgba(31, 30, 29, 0.3);
+
+  --text: #141413;
+  --text-2: #3d3d3a;
+  --text-3: #6f6e68;
+
+  --accent: #c96442;
+  --accent-text: #a8492a;
+  --brand: #c96442;
+  --brand-glow: 0 0 #0000;
+  --marker-glow: 0 0 #0000;
+  --logo-inner: #faf9f5;
+
+  /* Primary actions are ink, as on Anthropic's pages; terracotta is kept for
+     accents, where white text on it would fall short of 4.5:1. */
+  --btn-bg: #141413;
+  --btn-bg-hover: #30302e;
+  --btn-fg: #faf9f5;
+  --btn-shadow: 0 1px 2px rgba(20, 20, 19, 0.14);
+  --btn-shadow-hover: 0 2px 8px rgba(20, 20, 19, 0.18);
+  --btn-hover-filter: none;
+  --danger-bg: #b53333;
+  --danger-shadow: none;
+
+  --ok: #4d6b2c;
+  --warn: #8a5a10;
+  --bad: #b53333;
+
+  --check-bg: #c96442;
+  --check-fg: #ffffff;
+  --check-shadow: none;
+  --ring-track: #ebe9e1;
+
+  --modal-bg: #faf9f5;
+  --modal-solid: #faf9f5;
+  --scrim: rgba(20, 20, 19, 0.32);
+  --toast-bg: #141413;
+  --toast-fg: #faf9f5;
+  --option-bg: #ffffff;
+  --picker-filter: none;
+  --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%236f6e68' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M4 6.5 8 10.5l4-4'/%3E%3C/svg%3E");
+  --scroll-thumb: rgba(20, 20, 19, 0.18);
+  --scroll-thumb-hover: rgba(20, 20, 19, 0.3);
+
+  --shadow-sm: 0 1px 2px rgba(20, 20, 19, 0.05);
+  --shadow-md: 0 1px 2px rgba(20, 20, 19, 0.04), 0 4px 14px rgba(20, 20, 19, 0.05);
+  --shadow-lg: 0 2px 6px rgba(20, 20, 19, 0.06), 0 20px 48px rgba(20, 20, 19, 0.13);
+  --inner-top: 0 0 #0000;
+}
+
+[data-theme='argila-escuro'] {
+  color-scheme: dark;
+
+  --bg: #262624;
+  --canvas: #262624;
+
+  --surface-1: rgba(250, 249, 245, 0.04);
+  --surface-2: rgba(250, 249, 245, 0.07);
+  --surface-3: rgba(250, 249, 245, 0.11);
+  --surface-sunken: #1f1e1d;
+  --card-bg: #30302e;
+  --card-hover-bg: #343432;
+  --side-bg: #1f1e1d;
+  --bar-bg: rgba(31, 30, 29, 0.92);
+  --field: #262624;
+  --field-focus: #262624;
+
+  --line: rgba(222, 220, 209, 0.1);
+  --line-strong: rgba(222, 220, 209, 0.17);
+  --line-hover: rgba(222, 220, 209, 0.3);
+
+  --text: #faf9f5;
+  --text-2: #c2c0b6;
+  --text-3: #9c9a92;
+
+  --accent: #d97757;
+  --accent-text: #e38d70;
+  --brand: #d97757;
+  --brand-glow: 0 0 #0000;
+  --marker-glow: 0 0 #0000;
+  --logo-inner: #faf9f5;
+
+  --btn-bg: #faf9f5;
+  --btn-bg-hover: #e8e6dc;
+  --btn-fg: #141413;
+  --btn-shadow: none;
+  --btn-shadow-hover: none;
+  --btn-hover-filter: none;
+  --danger-bg: #c2453a;
+  --danger-shadow: none;
+
+  --ok: #9db36f;
+  --warn: #e3ae5a;
+  --bad: #ec8474;
+
+  --check-bg: #d97757;
+  --check-fg: #141413;
+  --check-shadow: none;
+  --ring-track: rgba(250, 249, 245, 0.1);
+
+  --modal-bg: #30302e;
+  --modal-solid: #30302e;
+  --scrim: rgba(0, 0, 0, 0.5);
+  --toast-bg: #faf9f5;
+  --toast-fg: #141413;
+  --option-bg: #30302e;
+  --picker-filter: none;
+  --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%239c9a92' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M4 6.5 8 10.5l4-4'/%3E%3C/svg%3E");
+  --scroll-thumb: rgba(250, 249, 245, 0.16);
+  --scroll-thumb-hover: rgba(250, 249, 245, 0.26);
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.25);
+  --shadow-md: 0 1px 2px rgba(0, 0, 0, 0.2), 0 6px 18px rgba(0, 0, 0, 0.22);
+  --shadow-lg: 0 4px 12px rgba(0, 0, 0, 0.3), 0 24px 60px rgba(0, 0, 0, 0.45);
+  --inner-top: 0 0 #0000;
+}
+
+/* ---------- Derived tokens ----------
+   Declared on every themed element, not only :root: a custom property that
+   references another is resolved where it is declared, so a nested preview
+   would otherwise inherit the page theme's mix. */
+
+:root,
+[data-theme] {
+  --accent-soft: color-mix(in srgb, var(--accent) 14%, transparent);
+  --accent-line: color-mix(in srgb, var(--accent) 36%, transparent);
+  --ok-soft: color-mix(in srgb, var(--ok) 13%, transparent);
+  --warn-soft: color-mix(in srgb, var(--warn) 14%, transparent);
+  --bad-soft: color-mix(in srgb, var(--bad) 13%, transparent);
+}
+
+/* ==========================================================================
+   Argila structure — what tokens alone cannot say
+   ========================================================================== */
+
+[data-theme^='argila'] {
+  --font-display: 'Newsreader', 'Iowan Old Style', 'Palatino Linotype', Georgia, serif;
+  --r-xs: 8px;
+  --r-sm: 10px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  --r-xl: 20px;
+}
+
+/* Flat paper: no ambient light, no grain, no glows. */
+[data-theme^='argila'] body::after,
+[data-theme^='argila'] .stat::before,
+[data-theme^='argila'] .subj::after {
+  display: none;
+}
+
+[data-theme^='argila'] .ring .fg {
+  filter: none;
+}
+
+/* Editorial serif for display type; the sans stays for everything you operate. */
+[data-theme^='argila'] h1 {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: clamp(1.95rem, 1.45rem + 1.9vw, 2.65rem);
+  letter-spacing: -0.018em;
+  line-height: 1.12;
+  background: none;
+  color: var(--text);
+}
+
+[data-theme^='argila'] .modal h3,
+[data-theme^='argila'] .detail-head h3,
+[data-theme^='argila'] .welcome h3 {
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 1.55rem;
+  letter-spacing: -0.012em;
+}
+
+[data-theme^='argila'] .subj h3 {
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 1.22rem;
+  letter-spacing: -0.008em;
+  line-height: 1.25;
+}
+
+[data-theme^='argila'] .stat b {
+  font-family: var(--font-display);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+[data-theme^='argila'] .logo-text {
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 1.14rem;
+  letter-spacing: -0.01em;
+}
+
+[data-theme^='argila'] .logo-text small {
+  font-family: var(--font-sans);
+}
+
+[data-theme^='argila'] .logo-mark {
+  border-radius: 9px;
+}
+
+/* Quiet labels in sentence case instead of tracked-out capitals. */
+[data-theme^='argila'] h2 {
+  text-transform: none;
+  letter-spacing: -0.005em;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+[data-theme^='argila'] label,
+[data-theme^='argila'] .stat-body span,
+[data-theme^='argila'] .detail-sec-head h4 {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+[data-theme^='argila'] .eyebrow {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 0.86rem;
+  font-weight: 500;
+}
+
+/* The sidebar reads as a paper margin: the active item is a fill, not a light. */
+[data-theme^='argila'] .sidebar {
+  border-right-color: var(--line);
+}
+
+[data-theme^='argila'] .nav-item.on {
+  background: var(--surface-3);
+}
+
+[data-theme^='argila'] .nav-item.on .ico {
+  color: var(--accent);
+}
+
+[data-theme^='argila'] .sidebar .nav-item.on::before {
+  display: none;
+}
+
+/* Cards sit on the page instead of floating over it. */
+[data-theme^='argila'] .card.hov:hover {
+  transform: none;
+  border-color: var(--line-hover);
+  box-shadow: var(--shadow-md);
+}
+
+[data-theme^='argila'] .btn:hover {
+  transform: none;
+}
+
+[data-theme^='argila'] .subj::before,
+[data-theme^='argila'] .detail::before {
+  background: var(--c);
+  opacity: 1;
+  height: 3px;
+}
+
+[data-theme^='argila'] .stat-ico {
+  background: color-mix(in srgb, var(--tone) 13%, transparent);
+  color: var(--tone);
+  box-shadow: none;
+}
+
+[data-theme^='argila'] .empty {
+  background: transparent;
+}
+
+[data-theme^='argila'] .toast::before {
+  background: var(--accent);
+}
+
+[data-theme^='argila'] .overlay,
+[data-theme^='argila'] .sheet-scrim {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+[data-theme^='argila'] .colors i.on {
+  box-shadow: 0 0 0 2px var(--modal-solid), 0 0 0 4px var(--text);
+}

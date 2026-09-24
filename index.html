@@ -1,18 +1,35 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt-BR" data-theme="aurora">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#070a12" />
     <meta name="description" content="Controle de faltas, conteúdos e tarefas do seu semestre." />
     <title>Meu Semestre</title>
+    <script>
+      // Runs before the first paint, so a saved theme never flashes the default
+      // one. modules/theme.js owns the rest; this only mirrors how "auto" resolves.
+      try {
+        var theme = (JSON.parse(localStorage.getItem('meu-semestre-prefs')) || {}).theme || 'aurora';
+        if (theme === 'auto') {
+          theme = matchMedia('(prefers-color-scheme: dark)').matches ? 'argila-escuro' : 'argila';
+        }
+        document.documentElement.dataset.theme = theme;
+      } catch (error) {}
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!-- Non-blocking: text paints at once in the fallback face and swaps when the
+         fonts land, instead of the page waiting on the network (or failing
+         offline). Newsreader is only downloaded while an Argila theme uses it. -->
     <link
-      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
       rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400..600;1,6..72,400..600&family=Plus+Jakarta+Sans:wght@400..800&display=swap"
+      media="print"
+      onload="this.media = 'all'"
     />
     <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./themes.css" />
   </head>
   <body>
     <svg class="sprite" aria-hidden="true" focusable="false">
@@ -35,6 +52,14 @@
       <symbol id="i-sparkle" viewBox="0 0 24 24"><path d="M12 3.2l2 6.2 6.2 2-6.2 2-2 6.2-2-6.2-6.2-2 6.2-2z"/></symbol>
       <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
       <symbol id="i-clip" viewBox="0 0 24 24"><path d="M20.4 11.2 12 19.6a5.4 5.4 0 0 1-7.6-7.6l8.6-8.6a3.6 3.6 0 0 1 5.1 5.1l-8.6 8.6a1.8 1.8 0 0 1-2.5-2.5l7.8-7.8"/></symbol>
+      <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.8"/><path d="m20.2 20.2-4.4-4.4"/></symbol>
+      <symbol id="i-theme" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.6"/><path d="M12 3.4a8.6 8.6 0 0 1 0 17.2z" fill="currentColor"/></symbol>
+      <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 14.2 4.4 9.6 9 5"/><path d="M4.4 9.6h10.2a5.2 5.2 0 0 1 0 10.4H11"/></symbol>
+      <symbol id="i-keyboard" viewBox="0 0 24 24"><rect x="2.6" y="5.8" width="18.8" height="12.4" rx="2.4"/><path d="M6.6 9.8h.01M10.2 9.8h.01M13.8 9.8h.01M17.4 9.8h.01M7.8 14.2h8.4"/></symbol>
+      <symbol id="i-flag" viewBox="0 0 24 24"><path d="M5.4 21V4.2"/><path d="M5.4 4.6h11.8l-2.4 4.2 2.4 4.2H5.4"/></symbol>
+      <symbol id="i-briefcase" viewBox="0 0 24 24"><rect x="3.4" y="7" width="17.2" height="12.8" rx="2.4"/><path d="M8.8 7V5.4a1.6 1.6 0 0 1 1.6-1.6h3.2a1.6 1.6 0 0 1 1.6 1.6V7M3.4 12.4h17.2"/></symbol>
+      <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13.4 6.4 19 12l-5.6 5.6"/></symbol>
+      <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m6.6 9.4 5.4 5.4 5.4-5.4"/></symbol>
     </svg>
 
     <div class="shell">
@@ -43,9 +68,14 @@
           <span class="logo-mark"></span>
           <span class="logo-text">Meu Semestre</span>
         </div>
-        <button class="icon-btn" id="more" aria-label="Mais opções" aria-expanded="false">
-          <svg class="ico"><use href="#i-more" /></svg>
-        </button>
+        <div class="top-tools">
+          <button class="icon-btn" data-a="palette" aria-label="Buscar">
+            <svg class="ico"><use href="#i-search" /></svg>
+          </button>
+          <button class="icon-btn" id="more" aria-label="Mais opções" aria-expanded="false">
+            <svg class="ico"><use href="#i-more" /></svg>
+          </button>
+        </div>
       </header>
 
       <aside class="sidebar">
@@ -57,16 +87,26 @@
           </span>
         </div>
 
+        <button class="search-trigger" data-a="palette" title="Buscar">
+          <svg class="ico"><use href="#i-search" /></svg>
+          <span>Buscar</span>
+          <kbd data-mod-key>Ctrl K</kbd>
+        </button>
+
         <nav id="nav" aria-label="Navegação principal"></nav>
 
         <div class="spacer"></div>
 
         <div class="side-foot">
-          <button class="ghost" id="export">
-            <svg class="ico"><use href="#i-download" /></svg>
-            <span>Exportar backup</span>
+          <button class="ghost" data-a="theme" title="Aparência">
+            <svg class="ico"><use href="#i-theme" /></svg>
+            <span>Aparência</span>
           </button>
-          <button class="ghost" id="import">
+          <button class="ghost" id="export" title="Exportar backup">
+            <svg class="ico"><use href="#i-download" /></svg>
+            <span>Exportar backup<small id="backup-age"></small></span>
+          </button>
+          <button class="ghost" id="import" title="Importar backup">
             <svg class="ico"><use href="#i-upload" /></svg>
             <span>Importar backup</span>
           </button>
@@ -80,6 +120,10 @@
     <div class="sheet-scrim" id="sheet" hidden>
       <div class="sheet" role="dialog" aria-label="Opções">
         <span class="sheet-grip"></span>
+        <button class="sheet-item" data-sheet="theme">
+          <svg class="ico"><use href="#i-theme" /></svg>
+          <span>Aparência</span>
+        </button>
         <button class="sheet-item" data-sheet="export">
           <svg class="ico"><use href="#i-download" /></svg>
           <span>Exportar backup</span>
@@ -99,7 +143,9 @@
     <script src="./modules/state.js" defer></script>
     <script src="./modules/utils.js" defer></script>
     <script src="./modules/files.js" defer></script>
+    <script src="./modules/theme.js" defer></script>
     <script src="./modules/render.js" defer></script>
+    <script src="./modules/palette.js" defer></script>
     <script src="./app.js" defer></script>
   </body>
 </html>

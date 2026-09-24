@@ -58,6 +58,18 @@ function getFileMeta(fileId) {
   return allFileMetas().find((file) => file.id === fileId);
 }
 
+// Files of deleted contents that an "Desfazer" toast can still bring back.
+// Pruning skips them until the toast is gone.
+const heldFiles = new Set();
+
+function holdFiles(fileIds) {
+  fileIds.forEach((fileId) => heldFiles.add(fileId));
+}
+
+function releaseFiles(fileIds) {
+  fileIds.forEach((fileId) => heldFiles.delete(fileId));
+}
+
 /**
  * Drops stored files that no content references any more. Called after anything
  * that removes contents or attachments, so no delete path has to track blobs.
@@ -66,7 +78,7 @@ async function pruneFiles() {
   try {
     const keys = await filesTx('readonly', (store) => store.getAllKeys());
     // Read after the await, so a save that finished meanwhile counts as referenced.
-    const referenced = new Set(allFileMetas().map((file) => file.id));
+    const referenced = new Set([...allFileMetas().map((file) => file.id), ...heldFiles]);
     const orphans = keys.filter((key) => !referenced.has(key));
     if (orphans.length) {
       await filesTx('readwrite', (store) => {

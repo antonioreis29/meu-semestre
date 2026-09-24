@@ -1,5 +1,6 @@
-let view = 'home';
+let view = viewFromHash();
 let filter = 'all';
+let showDone = false;
 
 // Close functions of the open dialogs, topmost last. Forms can open on top of the
 // subject panel, and Escape must dismiss only the one in front.
@@ -9,13 +10,37 @@ const dialogStack = [];
 // re-rendered on every refresh, like the view behind it.
 let detail = null;
 
-function refreshView() {
-  renderApp({ view, filter });
+// The latest "Desfazer" still on screen, for Ctrl+Z.
+let pendingUndo = null;
+
+function viewFromHash() {
+  const slug = decodeURIComponent(location.hash.slice(1));
+  return Object.keys(ROUTES).find((key) => ROUTES[key] === slug) || 'home';
+}
+
+/** `enter` as in renderApp: true when a view opens, 'list' for a new filter. */
+function refreshView({ enter = false } = {}) {
+  renderApp({ view, filter, showDone, enter });
   renderDetail();
 }
 
-function applyTheme() {
-  document.documentElement.dataset.theme = 'dark';
+function onRoute() {
+  view = viewFromHash();
+  filter = 'all';
+  showDone = false;
+  refreshView({ enter: true });
+  window.scrollTo(0, 0);
+}
+
+function navigate(target) {
+  const hash = `#${ROUTES[target]}`;
+  if (location.hash === hash || (!location.hash && target === 'home')) onRoute();
+  else location.hash = hash;
+}
+
+/** The subject the current filter points at, to preselect it in new forms. */
+function filterSubject() {
+  return getSubject(filter) ? filter : '';
 }
 
 function subOptions(selected = '') {
@@ -29,11 +54,13 @@ function subOptions(selected = '') {
 
 /**
  * Mounts an overlay with the dismiss behaviour every dialog shares: backdrop
- * click, any `[data-c]` button and Escape (handled in `bindEvents`).
+ * click, any `[data-c]` button and Escape (handled in `bindEvents`). Focus
+ * goes back to whatever opened it.
  */
-function openOverlay(html, onClose = null) {
+function openOverlay(html, onClose = null, className = '') {
+  const opener = document.activeElement;
   const overlay = document.createElement('div');
-  overlay.className = 'overlay';
+  overlay.className = `overlay ${className}`.trim();
   overlay.innerHTML = html;
 
   document.body.appendChild(overlay);
@@ -48,6 +75,7 @@ function openOverlay(html, onClose = null) {
     overlay.style.animation = 'fade .2s reverse forwards';
     setTimeout(() => overlay.remove(), 200);
     onClose?.();
+    if (opener?.isConnected) opener.focus({ preventScroll: true });
   };
 
   dialogStack.push(close);
@@ -106,7 +134,82 @@ function modal(title, body, onOk, options = {}) {
   return { close, overlay };
 }
 
-/** Opens the panel listing a subject's tasks and contents. */
+/** An in-app confirm(): themed, non-blocking, and resolves to true or false. */
+function confirmDialog({ title, text, okText = 'Excluir' }) {
+  return new Promise((resolve) => {
+    let answered = false;
+
+    const { close, overlay } = openOverlay(
+      `
+        <div class="modal confirm" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-text">
+          <h3 id="confirm-title">${title}</h3>
+          <p class="sub" id="confirm-text">${text}</p>
+          <div class="foot">
+            <button type="button" class="btn sec" data-c>Cancelar</button>
+            <button type="button" class="btn danger" data-ok>${icon('trash')}${okText}</button>
+          </div>
+        </div>
+      `,
+      () => {
+        if (!answered) resolve(false);
+      }
+    );
+
+    const okButton = overlay.querySelector('[data-ok]');
+    okButton.addEventListener('click', () => {
+      answered = true;
+      close();
+      resolve(true);
+    });
+    okButton.focus();
+  });
+}
+
+/**
+ * Shows `message` with a "Desfazer" button that runs `undo`. `settle` runs
+ * once the chance is gone, whether it was taken or not.
+ */
+function offerUndo(message, undo, settle = () => {}) {
+  const entry = {};
+  entry.dismiss = toast(message, {
+    action: 'Desfazer',
+    onAction: undo,
+    onClose: () => {
+      if (pendingUndo === entry) pendingUndo = null;
+      settle();
+    },
+  });
+  entry.run = () => {
+    undo();
+    entry.dismiss?.();
+  };
+  pendingUndo = entry;
+}
+
+/** Deletes at once and lets the user take it back, instead of asking first. */
+function removeWithUndo(message, tests) {
+  const taken = takeRecords(tests);
+  if (!taken.length) return;
+
+  // Attachments of removed contents must survive pruning while undo is possible.
+  const fileIds = taken.flatMap(([, , record]) => (record.files || []).map((file) => file.id));
+  holdFiles(fileIds);
+  refreshView();
+
+  offerUndo(
+    message,
+    () => {
+      putBackRecords(taken);
+      refreshView();
+    },
+    () => {
+      releaseFiles(fileIds);
+      pruneFiles();
+    }
+  );
+}
+
+/** Opens the panel listing a subject's tasks, contents and absences. */
 function subjectDetail(subjectId) {
   if (!getSubject(subjectId)) return;
 
@@ -118,11 +221,11 @@ function subjectDetail(subjectId) {
   );
 
   detail = { id: subjectId, close, overlay };
-  renderDetail();
+  renderDetail(true);
   overlay.querySelector('.detail').focus();
 }
 
-function renderDetail() {
+function renderDetail(enter = false) {
   if (!detail) return;
 
   const subject = getSubject(detail.id);
@@ -139,6 +242,8 @@ function renderDetail() {
 
   panel.setAttribute('aria-label', subject.name);
   panel.style.setProperty('--c', subject.color);
+  // Items sweep in when the panel opens, not on each refresh behind a form.
+  panel.classList.toggle('enter', enter);
   panel.innerHTML = renderSubjectDetail(subject);
   panel.scrollTop = scrollTop;
 
@@ -146,21 +251,33 @@ function renderDetail() {
     const twin = panel.querySelector(`[data-a="${focused.dataset.a}"][data-id="${focused.dataset.id}"]`);
     (twin || panel).focus();
   }
-
-  animateRings();
 }
 
-function deleteSubject(subjectId) {
-  updateState((current) => ({
-    ...current,
-    subjects: current.subjects.filter((item) => item.id !== subjectId),
-    absences: current.absences.filter((item) => item.sid !== subjectId),
-    contents: current.contents.filter((item) => item.sid !== subjectId),
-    tasks: current.tasks.filter((item) => item.sid !== subjectId),
-  }));
-  refreshView();
-  toast('Matéria excluída');
-  pruneFiles();
+async function deleteSubject(subjectId) {
+  const subject = getSubject(subjectId);
+  if (!subject) return false;
+
+  const { absences, contents } = tally(subjectId);
+  const tasks = appState.tasks.filter((task) => task.sid === subjectId).length;
+  const parts = [
+    absences && plural(absences, 'falta', 'faltas'),
+    contents && plural(contents, 'conteúdo', 'conteúdos'),
+    tasks && plural(tasks, 'tarefa', 'tarefas'),
+  ].filter(Boolean);
+
+  const confirmed = await confirmDialog({
+    title: `Excluir “${esc(subject.name)}”?`,
+    text: `${parts.length ? `Junto saem ${joinList(parts)}. ` : ''}Dá para desfazer logo em seguida.`,
+  });
+  if (!confirmed) return false;
+
+  removeWithUndo('Matéria excluída', {
+    subjects: (item) => item.id === subjectId,
+    absences: (item) => item.sid === subjectId,
+    contents: (item) => item.sid === subjectId,
+    tasks: (item) => item.sid === subjectId,
+  });
+  return true;
 }
 
 function subjectForm(subject = {}) {
@@ -214,10 +331,8 @@ function subjectForm(subject = {}) {
     {
       onDelete: isNew
         ? null
-        : (closeDialog) => {
-            if (!confirm('Excluir a matéria e tudo ligado a ela?')) return;
-            closeDialog();
-            deleteSubject(subject.id);
+        : async (closeDialog) => {
+            if (await deleteSubject(subject.id)) closeDialog();
           },
     }
   );
@@ -230,9 +345,10 @@ function addAbsence(payload, closeDialog) {
     return;
   }
 
+  const id = uid();
   updateState((current) => ({
     ...current,
-    absences: [...current.absences, { id: uid(), ...payload, count: Number(payload.count || 1) }],
+    absences: [...current.absences, { id, ...payload, count: Number(payload.count || 1) }],
   }));
 
   closeDialog();
@@ -240,13 +356,18 @@ function addAbsence(payload, closeDialog) {
 
   // Recomputed after the update so the warning reflects the new total.
   const ratio = used(subject) / limit(subject);
-  if (ratio >= 1) {
-    toast(`${subject.name}: limite de faltas atingido`);
-  } else if (ratio >= 0.75) {
-    toast(`Atenção: ${subject.name} está perto do limite`);
-  } else {
-    toast('Falta registrada');
-  }
+  const message =
+    ratio >= 1
+      ? `${subject.name}: limite de faltas atingido`
+      : ratio >= 0.75
+        ? `Atenção: ${subject.name} está perto do limite`
+        : 'Falta registrada';
+
+  // One click registers an absence, so one click takes it back.
+  offerUndo(message, () => {
+    takeRecords({ absences: (item) => item.id === id });
+    refreshView();
+  });
 }
 
 function absForm(subjectId = undefined) {
@@ -280,6 +401,13 @@ function absForm(subjectId = undefined) {
   );
 }
 
+/** Name for a pasted file: clipboard images all arrive as "image.png". */
+function pastedName(file) {
+  if (file.name && file.name !== 'image.png') return file.name;
+  const time = new Date().toTimeString().slice(0, 8).replace(/:/g, '');
+  return `captura-${today()}-${time}.${file.type.split('/')[1] || 'png'}`;
+}
+
 function contentForm(content = {}, subjectId = '') {
   if (!appState.subjects.length) {
     toast('Crie uma matéria primeiro');
@@ -306,7 +434,10 @@ function contentForm(content = {}, subjectId = '') {
       <label>Anexos</label>
       <div class="attach">
         <div class="attach-list"></div>
-        <button type="button" class="chip" data-add-file>${icon('clip')}Anexar arquivos</button>
+        <div class="attach-row">
+          <button type="button" class="chip" data-add-file>${icon('clip')}Anexar arquivos</button>
+          <span class="attach-hint">ou arraste para cá, ou cole um print com ${MOD_KEY}+V</span>
+        </div>
         <input type="file" multiple hidden data-file-input>
       </div>
     `,
@@ -341,9 +472,18 @@ function contentForm(content = {}, subjectId = '') {
       refreshView();
       toast('Conteúdo salvo');
       pruneFiles();
+    },
+    {
+      onDelete: isNew
+        ? null
+        : (closeDialog) => {
+            closeDialog();
+            removeWithUndo('Conteúdo excluído', { contents: (item) => item.id === content.id });
+          },
     }
   );
 
+  const zone = overlay.querySelector('.attach');
   const list = overlay.querySelector('.attach-list');
   const input = overlay.querySelector('[data-file-input]');
 
@@ -362,20 +502,54 @@ function contentForm(content = {}, subjectId = '') {
       .join('');
   };
 
-  overlay.querySelector('[data-add-file]').addEventListener('click', () => input.click());
-
-  input.addEventListener('change', () => {
-    for (const file of input.files) {
+  /** Queues files from the picker, a drop or a paste; returns how many were taken. */
+  const addFiles = (incoming, nameOf = (file) => file.name) => {
+    let count = 0;
+    for (const file of incoming) {
       if (file.size > MAX_FILE_SIZE) {
-        toast(`"${file.name}" passa de ${fmtSize(MAX_FILE_SIZE)} e não foi anexado`);
+        toast(`"${nameOf(file)}" passa de ${fmtSize(MAX_FILE_SIZE)} e não foi anexado`);
         continue;
       }
       const id = uid();
-      files.push({ id, name: file.name, type: file.type, size: file.size });
+      files.push({ id, name: nameOf(file), type: file.type, size: file.size });
       added.set(id, file);
+      count += 1;
     }
-    input.value = '';
     paintFiles();
+    return count;
+  };
+
+  overlay.querySelector('[data-add-file]').addEventListener('click', () => input.click());
+
+  input.addEventListener('change', () => {
+    addFiles(input.files);
+    input.value = '';
+  });
+
+  // Files dropped anywhere on the dialog land in the list.
+  overlay.addEventListener('dragover', (event) => {
+    if (!event.dataTransfer?.types.includes('Files')) return;
+    event.preventDefault();
+    zone.classList.add('drop');
+  });
+
+  overlay.addEventListener('dragleave', (event) => {
+    if (!overlay.contains(event.relatedTarget)) zone.classList.remove('drop');
+  });
+
+  overlay.addEventListener('drop', (event) => {
+    zone.classList.remove('drop');
+    if (!event.dataTransfer?.files.length) return;
+    event.preventDefault();
+    addFiles(event.dataTransfer.files);
+  });
+
+  // A pasted screenshot becomes an attachment; pasted text behaves as usual.
+  overlay.addEventListener('paste', (event) => {
+    const pasted = [...(event.clipboardData?.files || [])];
+    if (!pasted.length) return;
+    event.preventDefault();
+    if (addFiles(pasted, pastedName)) toast('Imagem colada como anexo');
   });
 
   list.addEventListener('click', (event) => {
@@ -390,50 +564,86 @@ function contentForm(content = {}, subjectId = '') {
   paintFiles();
 }
 
-function taskForm(subjectId = '') {
+function taskForm(task = {}, subjectId = '') {
+  const isNew = !task.id;
+  const kind = task.kind || 'tarefa';
+
   modal(
-    'Nova tarefa',
+    isNew ? 'Nova tarefa' : 'Editar tarefa',
     `
       <label>Título</label>
-      <input name="title" required placeholder="Ex.: Prova 1 de Física">
+      <input name="title" required value="${esc(task.title)}" placeholder="Ex.: Prova 1 de Física">
+      <label>Tipo</label>
+      <div class="seg" role="radiogroup" aria-label="Tipo">
+        ${Object.entries(TASK_KINDS)
+          .map(
+            ([value, [iconName, label]]) =>
+              `<label><input type="radio" name="kind" value="${value}" ${value === kind ? 'checked' : ''}><span>${icon(iconName)}${label}</span></label>`
+          )
+          .join('')}
+      </div>
       <div class="two">
         <div>
           <label>Matéria</label>
-          <select name="sid"><option value="">—</option>${subOptions(subjectId)}</select>
+          <select name="sid"><option value="">—</option>${subOptions(isNew ? subjectId : task.sid)}</select>
         </div>
         <div>
           <label>Data</label>
-          <input name="due" type="date">
+          <input name="due" type="date" value="${task.due || ''}">
         </div>
       </div>
     `,
     (data, closeDialog) => {
-      updateState((current) => ({
-        ...current,
-        tasks: [...current.tasks, { id: uid(), done: false, ...data }],
-      }));
+      if (isNew) {
+        updateState((current) => ({
+          ...current,
+          tasks: [...current.tasks, { id: uid(), done: false, ...data }],
+        }));
+      } else {
+        updateState((current) => ({
+          ...current,
+          tasks: current.tasks.map((item) => (item.id === task.id ? { ...item, ...data } : item)),
+        }));
+      }
       closeDialog();
       refreshView();
-      toast('Tarefa criada');
+      toast(isNew ? 'Tarefa criada' : 'Tarefa atualizada');
     },
-    { okText: 'Criar' }
+    {
+      okText: isNew ? 'Criar' : 'Salvar',
+      onDelete: isNew
+        ? null
+        : (closeDialog) => {
+            closeDialog();
+            removeWithUndo('Tarefa excluída', { tasks: (item) => item.id === task.id });
+          },
+    }
   );
 }
+
+function toggleDone(key, itemId, doneMessage) {
+  updateState((current) => ({
+    ...current,
+    [key]: current[key].map((item) => (item.id === itemId ? { ...item, done: !item.done } : item)),
+  }));
+  refreshView();
+  if (appState[key].find((item) => item.id === itemId)?.done) toast(doneMessage);
+}
+
+/** What N creates on each view. */
+const NEW_IN_VIEW = {
+  home: () => taskForm(),
+  subjects: () => subjectForm(),
+  absences: () => absForm(filterSubject() || undefined),
+  contents: () => contentForm({}, filterSubject()),
+  tasks: () => taskForm({}, filterSubject()),
+};
 
 function handleActions(event) {
   const trigger = event.target.closest('[data-f]');
   if (trigger) {
     filter = trigger.dataset.f;
-    refreshView();
-    return;
-  }
-
-  const navButton = event.target.closest('[data-v]');
-  if (navButton) {
-    view = navButton.dataset.v;
-    filter = 'all';
-    refreshView();
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    refreshView({ enter: 'list' });
     return;
   }
 
@@ -443,63 +653,44 @@ function handleActions(event) {
   const { a, id } = actionButton.dataset;
 
   const actions = {
+    palette: () => openPalette(),
+    theme: () => themePicker(),
+    'toggle-done': () => {
+      showDone = !showDone;
+      refreshView();
+    },
     'new-subj': () => subjectForm(),
     'open-subj': () => subjectDetail(id),
     'edit-subj': () => subjectForm(getSubject(id)),
-    'del-subj': () => {
-      const subject = getSubject(id);
-      if (!subject) return;
-      if (!confirm(`Excluir a matéria "${subject.name}" e todo o conteúdo relacionado?`)) return;
-      deleteSubject(id);
-    },
+    'del-subj': () => deleteSubject(id),
     'quick-abs': () => addAbsence({ sid: id, date: today(), count: 1, note: '' }, () => {}),
-    'new-abs': () => absForm(filter !== 'all' ? filter : undefined),
+    'new-abs': () => absForm(filterSubject() || undefined),
     'del-abs': () => {
       removeItemWithAnimation(actionButton, () => {
-        updateState((current) => ({
-          ...current,
-          absences: current.absences.filter((item) => item.id !== id),
-        }));
-        refreshView();
+        removeWithUndo('Falta excluída', { absences: (item) => item.id === id });
       });
     },
-    'new-cont': () => contentForm({}, id),
-    'edit-cont': () => contentForm(getContent(id)),
-    'tog-cont': () => {
-      updateState((current) => ({
-        ...current,
-        contents: current.contents.map((item) => (item.id === id ? { ...item, done: !item.done } : item)),
-      }));
-      refreshView();
-      if (getContent(id)?.done) toast('Conteúdo concluído');
+    'new-cont': () => contentForm({}, id || filterSubject()),
+    'edit-cont': () => {
+      const content = getContent(id);
+      if (content) contentForm(content);
     },
+    'tog-cont': () => toggleDone('contents', id, 'Conteúdo concluído'),
     'del-cont': () => {
       removeItemWithAnimation(actionButton, () => {
-        updateState((current) => ({
-          ...current,
-          contents: current.contents.filter((item) => item.id !== id),
-        }));
-        refreshView();
-        pruneFiles();
+        removeWithUndo('Conteúdo excluído', { contents: (item) => item.id === id });
       });
     },
     'open-file': () => openFile(id),
-    'new-task': () => taskForm(id),
-    'tog-task': () => {
-      updateState((current) => ({
-        ...current,
-        tasks: current.tasks.map((item) => (item.id === id ? { ...item, done: !item.done } : item)),
-      }));
-      refreshView();
-      if (getTask(id)?.done) toast('Tarefa concluída');
+    'new-task': () => taskForm({}, id || filterSubject()),
+    'edit-task': () => {
+      const task = getTask(id);
+      if (task) taskForm(task);
     },
+    'tog-task': () => toggleDone('tasks', id, 'Tarefa concluída'),
     'del-task': () => {
       removeItemWithAnimation(actionButton, () => {
-        updateState((current) => ({
-          ...current,
-          tasks: current.tasks.filter((item) => item.id !== id),
-        }));
-        refreshView();
+        removeWithUndo('Tarefa excluída', { tasks: (item) => item.id === id });
       });
     },
   };
@@ -525,9 +716,12 @@ async function exportBackup() {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;
-  anchor.download = 'meu-semestre-backup.json';
+  anchor.download = `meu-semestre-backup-${today()}.json`;
   anchor.click();
   URL.revokeObjectURL(url);
+
+  setPref('backupAt', Date.now());
+  renderBackupAge();
   toast('Backup baixado');
 }
 
@@ -556,8 +750,8 @@ function bindSheet() {
     const item = event.target.closest('[data-sheet]');
     if (item) {
       closeSheet();
-      if (item.dataset.sheet === 'export') exportBackup();
-      else importBackup();
+      const run = { theme: themePicker, export: exportBackup, import: importBackup }[item.dataset.sheet];
+      run?.();
       return;
     }
     if (event.target === sheet) closeSheet();
@@ -568,26 +762,79 @@ function bindSheet() {
   });
 }
 
+const isTyping = (target) => target.closest?.('input, textarea, select, [contenteditable="true"]');
+
+function handleKeys(event) {
+  const { key } = event;
+  const mod = event.ctrlKey || event.metaKey;
+
+  if (mod && !event.altKey && key.toLowerCase() === 'k') {
+    event.preventDefault();
+    togglePalette();
+    return;
+  }
+
+  if (key === 'Escape' && dialogStack.length) {
+    dialogStack[dialogStack.length - 1]();
+    return;
+  }
+
+  // Clickable cards and rows are focusable; let Enter and Space open them too.
+  if ((key === 'Enter' || key === ' ') && event.target.matches?.('[data-a][tabindex="0"]')) {
+    event.preventDefault();
+    event.target.click();
+    return;
+  }
+
+  if (isTyping(event.target)) return;
+
+  if (mod && !event.shiftKey && key.toLowerCase() === 'z' && pendingUndo) {
+    event.preventDefault();
+    pendingUndo.run();
+    return;
+  }
+
+  // Single-key shortcuts act on the page only, never behind an open dialog.
+  if (mod || event.altKey || dialogStack.length) return;
+
+  if (key === '/') {
+    event.preventDefault();
+    openPalette();
+  } else if (key === '?') {
+    event.preventDefault();
+    shortcutsHelp();
+  } else if (key === 'n' || key === 'N') {
+    event.preventDefault();
+    NEW_IN_VIEW[view]?.();
+  } else if (key === 't' || key === 'T') {
+    cycleTheme();
+  } else if (/^[1-5]$/.test(key)) {
+    navigate(NAV_ITEMS[Number(key) - 1][0]);
+  }
+}
+
 function bindEvents() {
   document.addEventListener('click', (event) => {
     const button = event.target.closest('.btn');
     if (button) addRipple(event, button);
 
+    // Links (views, notes) do their own thing; a link inside a content must
+    // not also open that content's editor.
+    if (event.target.closest('a[href]')) return;
+
     handleActions(event);
   });
 
-  document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape' && dialogStack.length) {
-      dialogStack[dialogStack.length - 1]();
-      return;
-    }
+  document.addEventListener('keydown', handleKeys);
+  window.addEventListener('hashchange', onRoute);
 
-    // Subject cards are clickable <article>s; let Enter and Space open them too.
-    if ((event.key === 'Enter' || event.key === ' ') && event.target.matches?.('.card[data-a]')) {
-      event.preventDefault();
-      event.target.click();
-    }
-  });
+  // A file dropped outside the attachment area would make the browser leave
+  // the app to show it.
+  const holdFileDrop = (event) => {
+    if (event.dataTransfer?.types.includes('Files')) event.preventDefault();
+  };
+  window.addEventListener('dragover', holdFileDrop);
+  window.addEventListener('drop', holdFileDrop);
 
   $('#export')?.addEventListener('click', exportBackup);
   $('#import')?.addEventListener('click', importBackup);
@@ -618,9 +865,8 @@ function bindEvents() {
         filesSaved = false;
       }
 
-      replaceState({ ...DEFAULT_STATE, ...state });
-      applyTheme();
-      refreshView();
+      replaceState(state);
+      refreshView({ enter: true });
       toast(filesSaved ? 'Backup importado' : 'Backup importado, mas os anexos não puderam ser salvos');
       pruneFiles();
     };
@@ -631,7 +877,11 @@ function bindEvents() {
   bindSheet();
 }
 
+document.querySelectorAll('[data-mod-key]').forEach((element) => {
+  element.textContent = `${MOD_KEY} K`;
+});
+
 applyTheme();
 bindEvents();
-refreshView();
+refreshView({ enter: true });
 pruneFiles();
